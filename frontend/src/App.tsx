@@ -1,5 +1,28 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { authRequest } from './api'
+import DocumentConfiguration from './DocumentConfiguration'
+import DocumentRegistry from './DocumentRegistry'
+import UserAdministration from './UserAdministration'
+import InstitutionConfiguration from './InstitutionConfiguration'
+import WorkflowConfiguration from './WorkflowConfiguration'
+import DistributionInbox from './DistributionInbox'
+import DocumentMigration from './DocumentMigration'
+import ExternalReferences from './ExternalReferences'
+import OperationalRecords from './OperationalRecords'
+import NotificationCenter from './NotificationCenter'
+import ReportsDashboard from './ReportsDashboard'
 import './App.css'
+
+type AuthUser = {
+  id: number
+  name: string
+  email: string
+  is_system_admin: boolean
+  must_change_password: boolean
+  roles: { name: string; code?: string; work_scope: string; organizational_unit?: string | null }[]
+  permissions: string[]
+  has_distributions: boolean
+}
 
 type PageId =
   | 'overview'
@@ -8,11 +31,13 @@ type PageId =
   | 'workflows'
   | 'distribution'
   | 'migration'
+  | 'external-references'
   | 'records'
   | 'reports'
   | 'organization'
   | 'access'
   | 'settings'
+  | 'document-configuration'
 
 type NavItem = {
   id: PageId
@@ -27,6 +52,7 @@ const mainNavigation: NavItem[] = [
   { id: 'workflows', label: 'Review & approval', icon: 'check' },
   { id: 'distribution', label: 'Distribution', icon: 'send' },
   { id: 'migration', label: 'Document migration', icon: 'upload' },
+  { id: 'external-references', label: 'External references', icon: 'files' },
   { id: 'records', label: 'Records & retention', icon: 'archive' },
   { id: 'reports', label: 'Reports & audit', icon: 'chart' },
 ]
@@ -34,6 +60,7 @@ const mainNavigation: NavItem[] = [
 const adminNavigation: NavItem[] = [
   { id: 'organization', label: 'Institution setup', icon: 'building' },
   { id: 'access', label: 'Users & access', icon: 'users' },
+  { id: 'document-configuration', label: 'Document types & categories', icon: 'files' },
   { id: 'settings', label: 'Workflow configuration', icon: 'sliders' },
 ]
 
@@ -68,6 +95,9 @@ const pageCopy: Record<PageId, { title: string; eyebrow: string; description: st
     eyebrow: 'Bring existing documents in',
     description: 'Preserve source files and metadata while authorized staff verify each item.',
   },
+  'external-references': {
+    title: 'External references', eyebrow: 'Review schedule', description: 'Register standards and guidance, track review dates, and link them to controlled documents.',
+  },
   records: {
     title: 'Records & retention',
     eyebrow: 'Operational records',
@@ -92,6 +122,11 @@ const pageCopy: Record<PageId, { title: string; eyebrow: string; description: st
     title: 'Workflow configuration',
     eyebrow: 'Foundation',
     description: 'Configure workflow templates and authority without hard-coding approval chains.',
+  },
+  'document-configuration': {
+    title: 'Document types & categories',
+    eyebrow: 'Document configuration',
+    description: 'Configure the labels and category structure used by the document registry.',
   },
 }
 
@@ -144,7 +179,143 @@ function App() {
   const [activePage, setActivePage] = useState<PageId>('overview')
   const [isSidebarOpen, setSidebarOpen] = useState(false)
   const [isNoticeVisible, setNoticeVisible] = useState(true)
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null)
+  const [authLoading, setAuthLoading] = useState(true)
+  const [authError, setAuthError] = useState('')
+  const [authBusy, setAuthBusy] = useState(false)
+  const [dashboardWidgets, setDashboardWidgets] = useState<{ key: string; label: string; count: number | null }[]>([])
+  const [dashboardScope, setDashboardScope] = useState<string[]>([])
   const currentPage = pageCopy[activePage]
+  const permissions = new Set(authUser?.permissions ?? [])
+  const canSeeTasks = ['document.create_revise', 'document.submission.verify', 'document.review.division_head', 'document.review.verify', 'document.master_copy.approve.manual_sop_guideline', 'records.manage'].some((permission) => permissions.has(permission))
+  const visibleMainNavigation = mainNavigation.filter((item) => {
+    if (item.id === 'overview') return true
+    if (item.id === 'tasks' || item.id === 'workflows') return canSeeTasks
+    if (item.id === 'registry') return permissions.has('document.registry.view')
+    if (item.id === 'distribution') return permissions.has('document.distribute') || Boolean(authUser?.has_distributions)
+    if (item.id === 'migration' || item.id === 'external-references') return permissions.has('document.register')
+    if (item.id === 'records') return permissions.has('records.manage')
+    if (item.id === 'reports') return permissions.has('document.register') || permissions.has('records.manage')
+    return false
+  })
+
+  useEffect(() => {
+    let active = true
+
+    authRequest('/auth/user')
+      .then((result) => { if (active) setAuthUser(result.user) })
+      .catch((error: unknown) => {
+        if (active && !(error instanceof Error && error.message === 'Unauthenticated.')) {
+          setAuthError('Could not reach the DCMS sign-in service. Start the Laravel server and refresh this page.')
+        }
+      })
+      .finally(() => { if (active) setAuthLoading(false) })
+
+    return () => { active = false }
+  }, [])
+
+  useEffect(() => {
+    if (!authUser) return
+    setActivePage('overview')
+    authRequest('/dashboard').then((data) => { setDashboardWidgets(data.widgets ?? []); setDashboardScope(data.scope ?? []) }).catch(() => { setDashboardWidgets([]); setDashboardScope([]) })
+  }, [authUser?.id])
+
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setAuthBusy(true)
+    setAuthError('')
+    const form = new FormData(event.currentTarget)
+
+    try {
+      const result = await authRequest('/auth/login', 'POST', {
+        email: String(form.get('email') ?? ''),
+        password: String(form.get('password') ?? ''),
+      })
+      setAuthUser(result.user)
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Sign-in failed.')
+    } finally {
+      setAuthBusy(false)
+    }
+  }
+
+  async function handlePasswordChange(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setAuthBusy(true)
+    setAuthError('')
+    const form = new FormData(event.currentTarget)
+
+    try {
+      const result = await authRequest('/auth/password', 'POST', {
+        current_password: String(form.get('current_password') ?? ''),
+        password: String(form.get('password') ?? ''),
+        password_confirmation: String(form.get('password_confirmation') ?? ''),
+      })
+      setAuthUser(result.user)
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Password change failed.')
+    } finally {
+      setAuthBusy(false)
+    }
+  }
+
+  async function handleLogout() {
+    setAuthBusy(true)
+    try {
+      await authRequest('/auth/logout', 'POST', {})
+      setAuthUser(null)
+      setAuthError('')
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Sign-out failed.')
+    } finally {
+      setAuthBusy(false)
+    }
+  }
+
+  if (authLoading) {
+    return <div className="auth-shell"><div className="auth-card"><div className="brand-mark" aria-hidden="true"><span>D</span></div><p>Connecting to ONP DCMS…</p></div></div>
+  }
+
+  if (!authUser) {
+    return (
+      <div className="auth-shell">
+        <form className="auth-card" onSubmit={handleLogin}>
+          <div className="brand-lockup auth-brand"><div className="brand-mark" aria-hidden="true"><span>D</span></div><div className="brand-copy"><span className="brand-name">DCMS</span><span className="brand-caption">OSPITAL NG PALAWAN</span></div></div>
+          <div className="eyebrow"><span className="eyebrow-line" />SECURE LOCAL SIGN-IN</div>
+          <h1>Welcome back.</h1>
+          <p className="page-description">Sign in with your individual DCMS account.</p>
+          <label className="auth-label" htmlFor="login-email">Email</label>
+          <input className="auth-input" id="login-email" name="email" type="email" autoComplete="username" required />
+          <label className="auth-label" htmlFor="login-password">Password</label>
+          <input className="auth-input" id="login-password" name="password" type="password" autoComplete="current-password" required />
+          {authError && <p className="auth-error" role="alert">{authError}</p>}
+          <button className="button button-primary auth-submit" type="submit" disabled={authBusy}>{authBusy ? 'Signing in…' : 'Sign in'}</button>
+          <p className="auth-help">If you cannot sign in, contact a DCMS system administrator.</p>
+        </form>
+      </div>
+    )
+  }
+
+  if (authUser.must_change_password) {
+    return (
+      <div className="auth-shell">
+        <form className="auth-card" onSubmit={handlePasswordChange}>
+          <div className="brand-lockup auth-brand"><div className="brand-mark" aria-hidden="true"><span>D</span></div><div className="brand-copy"><span className="brand-name">DCMS</span><span className="brand-caption">ACCOUNT SECURITY</span></div></div>
+          <div className="eyebrow"><span className="eyebrow-line" />PASSWORD UPDATE REQUIRED</div>
+          <h1>Choose a new password.</h1>
+          <p className="page-description">Your administrator provided a temporary password. Replace it before continuing.</p>
+          <label className="auth-label" htmlFor="current-password">Temporary password</label>
+          <input className="auth-input" id="current-password" name="current_password" type="password" autoComplete="current-password" required />
+          <label className="auth-label" htmlFor="new-password">New password (at least 12 characters)</label>
+          <input className="auth-input" id="new-password" name="password" type="password" autoComplete="new-password" minLength={12} required />
+          <label className="auth-label" htmlFor="confirm-password">Confirm new password</label>
+          <input className="auth-input" id="confirm-password" name="password_confirmation" type="password" autoComplete="new-password" minLength={12} required />
+          {authError && <p className="auth-error" role="alert">{authError}</p>}
+          <button className="button button-primary auth-submit" type="submit" disabled={authBusy}>{authBusy ? 'Updating…' : 'Update password'}</button>
+        </form>
+      </div>
+    )
+  }
 
   function navigate(page: PageId) {
     setActivePage(page)
@@ -192,10 +363,10 @@ function App() {
 
         <nav className="side-navigation" aria-label="Main navigation">
           <span className="nav-section-label">WORKSPACE</span>
-          {renderNav(mainNavigation)}
+          {renderNav(visibleMainNavigation)}
 
           <span className="nav-section-label admin-label">ADMINISTRATION</span>
-          {renderNav(adminNavigation)}
+          {authUser.is_system_admin && renderNav(adminNavigation)}
         </nav>
 
         <div className="sidebar-bottom">
@@ -208,13 +379,13 @@ function App() {
             <span className="status-dot" aria-label="Local mode" />
           </div>
           <div className="sidebar-user">
-            <div className="avatar avatar-user" aria-hidden="true">—</div>
+            <div className="avatar avatar-user" aria-hidden="true">{authUser.name.slice(0, 1).toUpperCase()}</div>
             <div className="sidebar-user-copy">
-              <strong>No user signed in</strong>
-              <span>Authentication not connected</span>
+              <strong>{authUser.name}</strong>
+              <span>{authUser.is_system_admin ? 'System administrator' : authUser.roles.map((role) => role.name).join(', ') || 'DCMS user'}</span>
             </div>
-            <button className="icon-button user-menu-button" type="button" aria-label="User menu is not available yet" title="User menu is not available yet">
-              <span className="more-dots">···</span>
+            <button className="icon-button user-menu-button" type="button" onClick={() => void handleLogout()} disabled={authBusy} aria-label="Sign out" title="Sign out">
+              <span className="more-dots">⇥</span>
             </button>
           </div>
         </div>
@@ -232,8 +403,8 @@ function App() {
           </div>
           <div className="topbar-actions">
             <div className="environment-pill"><span /> DEVELOPMENT PREVIEW</div>
-            <button className="top-icon-button" type="button" aria-label="Notifications are not available yet" title="Notifications are not available yet"><Icon name="bell" size={19} /><i /></button>
-            <div className="top-user-avatar" aria-label="Authentication not connected">—</div>
+            <NotificationCenter />
+            <div className="top-user-avatar" aria-label={`Signed in as ${authUser.name}`}>{authUser.name.slice(0, 1).toUpperCase()}</div>
           </div>
         </header>
 
@@ -245,8 +416,8 @@ function App() {
               <p className="page-description">{currentPage.description}</p>
             </div>
             <div className="welcome-actions">
-              <button className="button button-secondary" type="button" onClick={() => navigate('registry')}><Icon name="search" size={16} /> Find a document</button>
-              <button className="button button-primary" type="button" onClick={() => navigate('organization')}><Icon name="plus" size={17} /> Set up ONP</button>
+              {permissions.has('document.registry.view') && <button className="button button-secondary" type="button" onClick={() => navigate('registry')}><Icon name="search" size={16} /> Find a document</button>}
+              {authUser.is_system_admin && <button className="button button-primary" type="button" onClick={() => navigate('organization')}><Icon name="plus" size={17} /> Set up ONP</button>}
             </div>
           </section>
 
@@ -256,8 +427,11 @@ function App() {
             <button type="button" className="notice-dismiss" onClick={() => setNoticeVisible(false)} aria-label="Dismiss preview notice">×</button>
           </div>}
 
-          {activePage === 'overview' ? (
+          {visibleMainNavigation.some((item) => item.id === activePage) && (activePage === 'registry' || activePage === 'tasks' || activePage === 'workflows') ? <DocumentRegistry /> : visibleMainNavigation.some((item) => item.id === activePage) && activePage === 'distribution' ? <DistributionInbox /> : visibleMainNavigation.some((item) => item.id === activePage) && activePage === 'migration' ? <DocumentMigration /> : visibleMainNavigation.some((item) => item.id === activePage) && activePage === 'external-references' ? <ExternalReferences /> : visibleMainNavigation.some((item) => item.id === activePage) && activePage === 'records' ? <OperationalRecords /> : visibleMainNavigation.some((item) => item.id === activePage) && activePage === 'reports' ? <ReportsDashboard /> : activePage === 'organization' && authUser.is_system_admin ? <InstitutionConfiguration /> : activePage === 'access' && authUser.is_system_admin ? <UserAdministration /> : activePage === 'document-configuration' && authUser.is_system_admin ? <DocumentConfiguration /> : activePage === 'settings' && authUser.is_system_admin ? <WorkflowConfiguration /> : activePage === 'overview' ? (
             <>
+              <section className="metric-grid" aria-label="Role dashboard">
+                {dashboardWidgets.map((widget) => <article className="metric-card" key={widget.key}><div className="metric-copy"><span>{widget.label}</span><strong>{widget.count ?? '—'}</strong><small>{authUser.is_system_admin ? 'System settings only' : dashboardScope.join(', ') || (authUser.has_distributions ? 'My recipient inbox' : 'No document scope assigned')}</small></div></article>)}
+              </section>
               <section className="metric-grid" aria-label="Document control metrics">
                 {metrics.map((metric) => (
                   <article className="metric-card" key={metric.label}>
@@ -275,7 +449,7 @@ function App() {
                 <article className="panel activity-panel">
                   <div className="panel-heading">
                     <div><h2>Recent activity</h2><p>Keep track of important document events</p></div>
-                    <button className="text-button" type="button" onClick={() => navigate('reports')}>View audit log <Icon name="chevron" size={14} /></button>
+                    {(permissions.has('document.register') || permissions.has('records.manage')) && <button className="text-button" type="button" onClick={() => navigate('reports')}>View audit log <Icon name="chevron" size={14} /></button>}
                   </div>
                   <div className="empty-activity">
                     <div className="empty-illustration"><div className="empty-doc"><span /><span /><span /></div><div className="empty-clock"><Icon name="clock" size={17} /></div></div>
@@ -284,7 +458,7 @@ function App() {
                   </div>
                 </article>
 
-                <article className="panel setup-panel">
+                {authUser.is_system_admin && <article className="panel setup-panel">
                   <div className="panel-heading">
                     <div><h2>Set up ONP</h2><p>Prepare the workspace in a few steps</p></div>
                     <div className="setup-progress"><span>0</span> / 3</div>
@@ -301,23 +475,23 @@ function App() {
                     </button>
                   </div>
                   <button className="setup-footer" type="button" onClick={() => navigate('organization')}>Continue setup <Icon name="chevron" size={15} /></button>
-                </article>
+                </article>}
               </section>
 
               <section className="bottom-grid">
-                <article className="panel task-panel">
+                {canSeeTasks && <article className="panel task-panel">
                   <div className="panel-heading">
                     <div><h2>Assigned to me</h2><p>Your review and approval queue</p></div>
                     <button className="text-button" type="button" onClick={() => navigate('tasks')}>Open tasks <Icon name="chevron" size={14} /></button>
                   </div>
                   <div className="task-empty"><div className="task-empty-icon"><Icon name="inbox" size={20} /></div><span>No pending tasks</span><small>New assignments will be listed here.</small></div>
-                </article>
-                <article className="panel principle-panel">
+                </article>}
+                {canSeeTasks && <article className="panel principle-panel">
                   <div className="principle-top"><div className="principle-icon"><Icon name="shield" size={18} /></div><span>DCMS PRINCIPLE</span></div>
                   <blockquote>“A file upload is not an approval.”</blockquote>
                   <p>Every review, decision, effective date, and controlled release is recorded as a separate step.</p>
                   <button className="principle-link" type="button" onClick={() => navigate('workflows')}>Explore document lifecycle <Icon name="chevron" size={14} /></button>
-                </article>
+                </article>}
               </section>
             </>
           ) : (

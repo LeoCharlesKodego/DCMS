@@ -1,0 +1,14 @@
+/.local-tools/
+/backend/.local-tools/
+/backend/.env
+/backend/.env.ngrok
+/backend/public/shared/
+/backend/local-demo/backups/
+/backend/local-demo/ngrok/
+/backend/local-demo/ngrok-private/
+/.local-private/
+/backend/.local-private/
+/backend/local-demo/ngrok-storage/
+/backend/local-demo/serve-ngrok.log
+/backend/vendor/
+/backend/node_modules/

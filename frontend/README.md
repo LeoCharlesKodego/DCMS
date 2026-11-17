@@ -9,7 +9,7 @@ npm install
 npm run dev
 ```
 
-The current interface is a responsive foundation preview. It has no API connection, authentication, database, or live document data yet. Module navigation and setup links show planned sections; they do not create or change records.
+The current interface is a responsive foundation preview. It now uses Laravel session authentication for sign-in, sign-out, and required password changes. Document modules remain previews; their navigation does not create or change records.
 
 ## Project constraints
 
@@ -22,8 +22,29 @@ The current interface is a responsive foundation preview. It has no API connecti
 ## Current implementation
 
 - Responsive navigation shell for the documented DCMS modules.
+- System-administrator page for configuring document type labels and hierarchical categories; code values are stored as entered while D-019 remains open.
 - Overview empty state that does not invent institution or document data.
 - Setup links for ONP, access, and configurable workflow areas.
 - Native system font fallbacks; the interface makes no external font request.
+- Vite forwards local `/api` requests to the Laravel development server at `127.0.0.1:8000`.
 
-Laravel API, persistence, authentication, and module workflows have not been implemented.
+The Laravel API exposes `GET /api/health` and the account routes described in
+[`backend/README_AUTHENTICATION.md`](../backend/README_AUTHENTICATION.md). Document
+workflows, scoped role assignment, and graphical user administration are not
+implemented yet.
+
+For local development, start Laravel from the repository root:
+
+```powershell
+.\.local-tools\php-8.5.12\php.exe .\backend\artisan serve --host=127.0.0.1 --port=8000
+```
+
+In a second terminal, start Vite:
+
+```powershell
+Set-Location frontend
+npm.cmd run dev
+```
+
+Vite forwards `/api` requests to Laravel. Local runtimes and MySQL are kept under
+the ignored `.local-tools/` directory; the production server decision remains open.
