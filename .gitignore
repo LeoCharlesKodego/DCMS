@@ -12,3 +12,8 @@
 /backend/local-demo/serve-ngrok.log
 /backend/vendor/
 /backend/node_modules/
+/backend/.env.dev-local
+/backend/database/local-dev.sqlite
+/frontend/e2e/screenshots/
+/frontend/test-results/
+/frontend/playwright-report/
