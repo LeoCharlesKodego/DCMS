@@ -1,29 +1,302 @@
-:root {
-  font-family: 'Segoe UI', Arial, sans-serif;
-  color: #44545f;
-  background: #f7f9f8;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  font-optical-sizing: auto;
-  font-weight: 400;
-  --navy: #1b3545;
-  --teal: #4b8b79;
-  --canvas: #f7f9f8;
-  --line: #e8edef;
-  --serif: Georgia, 'Times New Roman', serif;
+/* Self-hosted, no runtime network request. SIL OFL 1.1 — see assets/fonts/OFL-*.txt */
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('./assets/fonts/archivo-latin.woff2') format('woff2');
 }
 
-* { box-sizing: border-box; }
+@font-face {
+  font-family: 'Source Serif 4';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('./assets/fonts/source-serif-4-latin.woff2') format('woff2');
+}
+
+:root {
+  color-scheme: light dark;
+
+  /* Type */
+  --font-sans: 'Archivo', ui-sans-serif, system-ui, 'Segoe UI', sans-serif;
+  --font-serif: 'Source Serif 4', ui-serif, Charter, Georgia, serif;
+
+  --text-2xs: 0.6875rem; /* 11px — uppercase micro-labels only */
+  --text-xs: 0.75rem;    /* 12px — the minimum for readable content */
+  --text-sm: 0.8125rem;  /* 13px */
+  --text-base: 0.9375rem; /* 15px */
+  --text-md: 1.0625rem;  /* 17px */
+  --text-lg: clamp(1.25rem, 1rem + 0.6cqi, 1.5rem);
+  --text-xl: clamp(1.5rem, 1.15rem + 1cqi, 1.875rem);
+  --text-display: clamp(2rem, 1.3rem + 2.4cqi, 3.125rem);
+
+  --leading-tight: 1.15;
+  --leading-snug: 1.35;
+  --leading-base: 1.55;
+
+  /* Space: 4px base */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-section: clamp(1.5rem, 1rem + 1.5cqi, 2.5rem);
+
+  /* Radius */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-pill: 999px;
+
+  /* Elevation */
+  --shadow-raised: 0 1px 2px oklch(0.22 0.02 250 / 0.05),
+    0 4px 12px -8px oklch(0.22 0.02 250 / 0.1);
+  --shadow-overlay: 0 1px 2px oklch(0.22 0.02 250 / 0.06),
+    0 16px 40px -12px oklch(0.22 0.02 250 / 0.18);
+
+  /* Motion */
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Colour — light */
+  --paper: oklch(0.982 0.008 92);
+  --surface: oklch(0.995 0.004 92);
+  --surface-sunken: oklch(0.962 0.01 92);
+  --ink: oklch(0.26 0.035 250);
+  --ink-muted: oklch(0.48 0.02 250);
+  --ink-faint: oklch(0.55 0.015 250);
+  --rule: oklch(0.895 0.01 92);
+  --rule-strong: oklch(0.8 0.014 92);
+
+  --seal: oklch(0.52 0.165 32);
+  --seal-strong: oklch(0.46 0.17 32);
+  --seal-soft: oklch(0.955 0.025 32);
+  --on-seal: oklch(0.99 0.004 92);
+
+  --verify: oklch(0.5 0.075 175);
+  --verify-soft: oklch(0.955 0.018 175);
+  --pending: oklch(0.54 0.115 78);
+  --pending-soft: oklch(0.965 0.03 78);
+  --danger: oklch(0.48 0.17 22);
+  --danger-soft: oklch(0.965 0.022 22);
+  --success: oklch(0.47 0.09 155);
+  --success-soft: oklch(0.96 0.02 155);
+  --focus-ring: var(--seal);
+
+  /* App backdrop: quiet, low-contrast glows behind translucent chrome */
+  --backdrop: radial-gradient(
+      70rem 50rem at 6% -12%,
+      oklch(0.93 0.028 250 / 0.55),
+      transparent 62%
+    ),
+    radial-gradient(
+      55rem 45rem at 102% -6%,
+      oklch(0.95 0.032 32 / 0.5),
+      transparent 58%
+    ),
+    radial-gradient(
+      60rem 55rem at 55% 112%,
+      oklch(0.94 0.022 175 / 0.4),
+      transparent 60%
+    );
+
+  /* Glass — opaque base is the real style, translucency is the enhancement */
+  --glass-bg: oklch(0.995 0.004 92 / 0.82);
+  --glass-border: oklch(0.86 0.01 92 / 0.9);
+  --glass-highlight: inset 0 1px 0 oklch(1 0 0 / 0.55);
+  --glass-shadow: 0 1px 2px oklch(0.22 0.02 250 / 0.06),
+    0 14px 36px -14px oklch(0.22 0.02 250 / 0.22);
+  --glass-blur: 16px;
+  --glass-saturate: 135%;
+  --glass-radius: var(--radius-md);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: oklch(0.215 0.018 255);
+    --surface: oklch(0.255 0.018 255);
+    --surface-sunken: oklch(0.195 0.016 255);
+    --ink: oklch(0.935 0.012 92);
+    --ink-muted: oklch(0.735 0.014 92);
+    --ink-faint: oklch(0.65 0.014 92);
+    --rule: oklch(0.345 0.014 255);
+    --rule-strong: oklch(0.44 0.016 255);
+
+    --seal: oklch(0.7 0.145 32);
+    --seal-strong: oklch(0.78 0.13 32);
+    --seal-soft: oklch(0.3 0.045 32);
+    --on-seal: oklch(0.2 0.02 255);
+
+    --verify: oklch(0.72 0.085 175);
+    --verify-soft: oklch(0.28 0.03 175);
+    --pending: oklch(0.79 0.1 78);
+    --pending-soft: oklch(0.3 0.04 78);
+    --danger: oklch(0.7 0.19 15);
+    --danger-soft: oklch(0.3 0.05 22);
+    --success: oklch(0.72 0.09 155);
+    --success-soft: oklch(0.28 0.04 155);
+
+    --shadow-raised: 0 1px 2px oklch(0.05 0 0 / 0.35),
+      0 4px 12px -8px oklch(0.05 0 0 / 0.5);
+    --shadow-overlay: 0 1px 2px oklch(0.05 0 0 / 0.4),
+      0 16px 40px -12px oklch(0.05 0 0 / 0.6);
+
+    --backdrop: radial-gradient(
+        70rem 50rem at 6% -12%,
+        oklch(0.34 0.05 250 / 0.55),
+        transparent 62%
+      ),
+      radial-gradient(
+        55rem 45rem at 102% -6%,
+        oklch(0.36 0.06 32 / 0.45),
+        transparent 58%
+      ),
+      radial-gradient(
+        60rem 55rem at 55% 112%,
+        oklch(0.32 0.04 175 / 0.4),
+        transparent 60%
+      );
+
+    --glass-bg: oklch(0.26 0.018 255 / 0.74);
+    --glass-border: oklch(0.44 0.016 255 / 0.8);
+    --glass-highlight: inset 0 1px 0 oklch(1 0 0 / 0.08);
+    --glass-shadow: 0 1px 2px oklch(0.05 0 0 / 0.4),
+      0 16px 40px -16px oklch(0.05 0 0 / 0.6);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background-color: var(--paper);
+  -webkit-text-size-adjust: 100%;
+}
 
 body {
-  min-width: 320px;
-  min-height: 100vh;
+  min-inline-size: 20rem;
+  min-block-size: 100dvh;
   margin: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: 400;
+  line-height: var(--leading-base);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-button { font-family: inherit; }
-button:focus-visible { outline: 2px solid #6aa291; outline-offset: 2px; }
+/* Painted above the canvas, below all content; fixed so it never scrolls. */
+body::before {
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  background-image: var(--backdrop);
+  background-repeat: no-repeat;
+  content: '';
+  pointer-events: none;
+}
 
-::selection { background: #d9ebe3; color: #173d32; }
+h1,
+h2,
+h3,
+blockquote {
+  text-wrap: balance;
+}
+
+p,
+li,
+dd {
+  text-wrap: pretty;
+}
+
+button {
+  font-family: inherit;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--seal-soft);
+  color: var(--ink);
+}
+
+/* ---------------------------------------------------------------------------
+   Glass surface primitive.
+   Opaque surface by default. Translucency is applied only where the browser
+   can actually blur, and is disabled for reduced transparency, forced colours,
+   and reduced motion. Never nest one glass surface inside another.
+   --------------------------------------------------------------------------- */
+.surface-glass {
+  border: 1px solid var(--rule);
+  border-radius: var(--glass-radius);
+  background-color: var(--surface);
+  box-shadow: var(--shadow-raised);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .surface-glass {
+    border-color: var(--glass-border);
+    background-color: var(--glass-bg);
+    box-shadow: var(--glass-shadow), var(--glass-highlight);
+    -webkit-backdrop-filter: blur(var(--glass-blur))
+      saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .surface-glass {
+    border-color: var(--rule);
+    background-color: var(--surface);
+    box-shadow: var(--shadow-raised);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .surface-glass {
+    border: 1px solid CanvasText;
+    background-color: Canvas;
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

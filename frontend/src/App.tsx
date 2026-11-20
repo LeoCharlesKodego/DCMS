@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from 'react'
 import { authRequest } from './api'
 import DocumentConfiguration from './DocumentConfiguration'
 import DocumentRegistry from './DocumentRegistry'
@@ -64,78 +64,21 @@ const adminNavigation: NavItem[] = [
   { id: 'settings', label: 'Workflow configuration', icon: 'sliders' },
 ]
 
-const pageCopy: Record<PageId, { title: string; eyebrow: string; description: string }> = {
-  overview: {
-    title: 'Good morning',
-    eyebrow: 'Workspace overview',
-    description: 'A clear view of controlled documents, decisions, and what needs attention.',
-  },
-  tasks: {
-    title: 'My tasks',
-    eyebrow: 'Your workspace',
-    description: 'Reviews and actions assigned to you will appear here.',
-  },
-  registry: {
-    title: 'Document registry',
-    eyebrow: 'Controlled documents',
-    description: 'Find and manage the institution’s controlled document records and versions.',
-  },
-  workflows: {
-    title: 'Review & approval',
-    eyebrow: 'Document lifecycle',
-    description: 'Review decisions, approvals, and releases are tracked as separate actions.',
-  },
-  distribution: {
-    title: 'Distribution',
-    eyebrow: 'Controlled access',
-    description: 'Track the exact released version shared with each team or recipient.',
-  },
-  migration: {
-    title: 'Document migration',
-    eyebrow: 'Bring existing documents in',
-    description: 'Preserve source files and metadata while authorized staff verify each item.',
-  },
-  'external-references': {
-    title: 'External references', eyebrow: 'Review schedule', description: 'Register standards and guidance, track review dates, and link them to controlled documents.',
-  },
-  records: {
-    title: 'Records & retention',
-    eyebrow: 'Operational records',
-    description: 'Manage approved retention schedules, holds, and documented disposition decisions.',
-  },
-  reports: {
-    title: 'Reports & audit',
-    eyebrow: 'Traceability',
-    description: 'Authorized reporting and a protected history of important system events.',
-  },
-  organization: {
-    title: 'ONP setup',
-    eyebrow: 'Foundation',
-    description: 'Set up Ospital ng Palawan and its configurable organizational structure.',
-  },
-  access: {
-    title: 'Users & access',
-    eyebrow: 'Foundation',
-    description: 'Manage user access by role, organizational scope, and assignment validity.',
-  },
-  settings: {
-    title: 'Workflow configuration',
-    eyebrow: 'Foundation',
-    description: 'Configure workflow templates and authority without hard-coding approval chains.',
-  },
-  'document-configuration': {
-    title: 'Document types & categories',
-    eyebrow: 'Document configuration',
-    description: 'Configure the labels and category structure used by the document registry.',
-  },
+const pageTitles: Record<PageId, string> = {
+  overview: 'Overview',
+  tasks: 'My tasks',
+  registry: 'Document registry',
+  workflows: 'Review & approval',
+  distribution: 'Distribution',
+  migration: 'Document migration',
+  'external-references': 'External references',
+  records: 'Records & retention',
+  reports: 'Reports & audit',
+  organization: 'Institution setup',
+  access: 'Users & access',
+  settings: 'Workflow configuration',
+  'document-configuration': 'Document types & categories',
 }
-
-const metrics = [
-  { label: 'Controlled documents', icon: 'files', tone: 'blue' },
-  { label: 'Awaiting your review', icon: 'clock', tone: 'amber' },
-  { label: 'Reviews coming due', icon: 'calendar', tone: 'violet' },
-  { label: 'Acknowledgments pending', icon: 'users', tone: 'teal' },
-]
 
 function Icon({ name, size = 18 }: { name: string; size?: number }) {
   const common = {
@@ -170,6 +113,7 @@ function Icon({ name, size = 18 }: { name: string; size?: number }) {
     plus: <><path d="M12 5v14M5 12h14" /></>,
     shield: <><path d="M12 3 20 6v5c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-3z" /><path d="m9 12 2 2 4-4" /></>,
     spark: <><path d="m12 3 1.5 6.5L20 12l-6.5 1.5L12 20l-1.5-6.5L4 12l6.5-2.5L12 3z" /><path d="m19 16 .7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7L19 16z" /></>,
+    close: <><path d="m6 6 12 12M18 6 6 18" /></>,
   }
 
   return <svg {...common}>{paths[name] ?? paths.files}</svg>
@@ -177,15 +121,18 @@ function Icon({ name, size = 18 }: { name: string; size?: number }) {
 
 function App() {
   const [activePage, setActivePage] = useState<PageId>('overview')
-  const [isSidebarOpen, setSidebarOpen] = useState(false)
-  const [isNoticeVisible, setNoticeVisible] = useState(true)
+  const navDialogRef = useRef<HTMLDialogElement>(null)
+  const navTriggerRef = useRef<HTMLButtonElement>(null)
+  const [isNavOpen, setNavOpen] = useState(false)
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [authError, setAuthError] = useState('')
   const [authBusy, setAuthBusy] = useState(false)
+  const [loginErrors, setLoginErrors] = useState<{ email?: string; password?: string }>({})
+  const [showPassword, setShowPassword] = useState(false)
   const [dashboardWidgets, setDashboardWidgets] = useState<{ key: string; label: string; count: number | null }[]>([])
-  const [dashboardScope, setDashboardScope] = useState<string[]>([])
-  const currentPage = pageCopy[activePage]
+  const [dashboardState, setDashboardState] = useState<'loading' | 'ready' | 'error'>('loading')
+  const pageTitle = pageTitles[activePage]
   const permissions = new Set(authUser?.permissions ?? [])
   const canSeeTasks = ['document.create_revise', 'document.submission.verify', 'document.review.division_head', 'document.review.verify', 'document.master_copy.approve.manual_sop_guideline', 'records.manage'].some((permission) => permissions.has(permission))
   const visibleMainNavigation = mainNavigation.filter((item) => {
@@ -214,23 +161,67 @@ function App() {
     return () => { active = false }
   }, [])
 
+  const loadDashboard = useCallback(() => {
+    setDashboardState('loading')
+    authRequest('/dashboard')
+      .then((data) => { setDashboardWidgets(data.widgets ?? []); setDashboardState('ready') })
+      .catch(() => { setDashboardWidgets([]); setDashboardState('error') })
+  }, [])
+
   useEffect(() => {
     if (!authUser) return
     setActivePage('overview')
-    authRequest('/dashboard').then((data) => { setDashboardWidgets(data.widgets ?? []); setDashboardScope(data.scope ?? []) }).catch(() => { setDashboardWidgets([]); setDashboardScope([]) })
-  }, [authUser?.id])
+    loadDashboard()
+  }, [authUser?.id, loadDashboard])
+
+  useEffect(() => {
+    document.title = authUser ? `${pageTitle} · ONP DCMS` : 'Sign in · ONP DCMS'
+  }, [pageTitle, authUser])
+
+  function validateLoginField(name: 'email' | 'password', value: string) {
+    if (name === 'email') {
+      if (!value.trim()) return 'Enter your email address.'
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) return 'Enter an email address in the format name@example.org.'
+      return undefined
+    }
+
+    return value ? undefined : 'Enter your password.'
+  }
+
+  function applyLoginValidation(input: HTMLInputElement) {
+    const name = input.name as 'email' | 'password'
+    const message = validateLoginField(name, input.value)
+    setLoginErrors((current) => ({ ...current, [name]: message }))
+    return message
+  }
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const formElement = event.currentTarget
+    const emailInput = formElement.elements.namedItem('email') as HTMLInputElement
+    const passwordInput = formElement.elements.namedItem('password') as HTMLInputElement
+    const errors = {
+      email: validateLoginField('email', emailInput.value),
+      password: validateLoginField('password', passwordInput.value),
+    }
+    setLoginErrors(errors)
+
+    if (errors.email || errors.password) {
+      const firstInvalid = errors.email ? emailInput : passwordInput
+      firstInvalid.focus()
+      return
+    }
+
     setAuthBusy(true)
     setAuthError('')
-    const form = new FormData(event.currentTarget)
+    const form = new FormData(formElement)
 
     try {
       const result = await authRequest('/auth/login', 'POST', {
         email: String(form.get('email') ?? ''),
         password: String(form.get('password') ?? ''),
       })
+      setLoginErrors({})
       setAuthUser(result.user)
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : 'Sign-in failed.')
@@ -279,18 +270,54 @@ function App() {
   if (!authUser) {
     return (
       <div className="auth-shell">
-        <form className="auth-card" onSubmit={handleLogin}>
-          <div className="brand-lockup auth-brand"><div className="brand-mark" aria-hidden="true"><span>D</span></div><div className="brand-copy"><span className="brand-name">DCMS</span><span className="brand-caption">OSPITAL NG PALAWAN</span></div></div>
-          <div className="eyebrow"><span className="eyebrow-line" />SECURE LOCAL SIGN-IN</div>
-          <h1>Welcome back.</h1>
-          <p className="page-description">Sign in with your individual DCMS account.</p>
+        <form className="auth-card" onSubmit={handleLogin} noValidate>
+          <div className="brand-lockup auth-brand"><div className="brand-mark" aria-hidden="true"><span>D</span></div><div className="brand-copy"><h1 className="brand-name">DCMS</h1></div></div>
           <label className="auth-label" htmlFor="login-email">Email</label>
-          <input className="auth-input" id="login-email" name="email" type="email" autoComplete="username" required />
+          <input
+            className="auth-input"
+            id="login-email"
+            name="email"
+            type="email"
+            autoComplete="username"
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            enterKeyHint="next"
+            required
+            aria-invalid={loginErrors.email ? true : undefined}
+            aria-describedby={loginErrors.email ? 'login-email-error' : undefined}
+            onBlur={(event) => applyLoginValidation(event.currentTarget)}
+            onInput={(event) => { if (loginErrors.email) applyLoginValidation(event.currentTarget) }}
+          />
+          {loginErrors.email && <p className="field-error" id="login-email-error" role="alert">{loginErrors.email}</p>}
           <label className="auth-label" htmlFor="login-password">Password</label>
-          <input className="auth-input" id="login-password" name="password" type="password" autoComplete="current-password" required />
+          <div className="password-field">
+            <input
+              className="auth-input password-input"
+              id="login-password"
+              name="password"
+              type={showPassword ? 'text' : 'password'}
+              autoComplete="current-password"
+              enterKeyHint="done"
+              required
+              aria-invalid={loginErrors.password ? true : undefined}
+              aria-describedby={loginErrors.password ? 'login-password-error' : undefined}
+              onBlur={(event) => applyLoginValidation(event.currentTarget)}
+              onInput={(event) => { if (loginErrors.password) applyLoginValidation(event.currentTarget) }}
+            />
+            <button
+              className="password-toggle"
+              type="button"
+              aria-pressed={showPassword}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              onClick={() => setShowPassword((visible) => !visible)}
+            >
+              {showPassword ? 'Hide' : 'Show'}
+            </button>
+          </div>
+          {loginErrors.password && <p className="field-error" id="login-password-error" role="alert">{loginErrors.password}</p>}
           {authError && <p className="auth-error" role="alert">{authError}</p>}
           <button className="button button-primary auth-submit" type="submit" disabled={authBusy}>{authBusy ? 'Signing in…' : 'Sign in'}</button>
-          <p className="auth-help">If you cannot sign in, contact a DCMS system administrator.</p>
         </form>
       </div>
     )
@@ -300,8 +327,7 @@ function App() {
     return (
       <div className="auth-shell">
         <form className="auth-card" onSubmit={handlePasswordChange}>
-          <div className="brand-lockup auth-brand"><div className="brand-mark" aria-hidden="true"><span>D</span></div><div className="brand-copy"><span className="brand-name">DCMS</span><span className="brand-caption">ACCOUNT SECURITY</span></div></div>
-          <div className="eyebrow"><span className="eyebrow-line" />PASSWORD UPDATE REQUIRED</div>
+          <div className="brand-lockup auth-brand"><div className="brand-mark" aria-hidden="true"><span>D</span></div><div className="brand-copy"><span className="brand-name">DCMS</span></div></div>
           <h1>Choose a new password.</h1>
           <p className="page-description">Your administrator provided a temporary password. Replace it before continuing.</p>
           <label className="auth-label" htmlFor="current-password">Temporary password</label>
@@ -317,9 +343,24 @@ function App() {
     )
   }
 
+  function openNav() {
+    const dialog = navDialogRef.current
+    if (!dialog) return
+    dialog.showModal()
+    setNavOpen(true)
+  }
+
+  function closeNav() {
+    navDialogRef.current?.close()
+  }
+
+  function handleNavBackdrop(event: MouseEvent<HTMLDialogElement>) {
+    if (event.target === event.currentTarget) closeNav()
+  }
+
   function navigate(page: PageId) {
     setActivePage(page)
-    setSidebarOpen(false)
+    closeNav()
   }
 
   function renderNav(items: NavItem[]) {
@@ -333,116 +374,137 @@ function App() {
       >
         <Icon name={item.icon} />
         <span>{item.label}</span>
-        {item.id === 'tasks' && <span className="nav-count">—</span>}
       </button>
     ))
   }
 
-  return (
-    <div className="app-shell">
-      <aside className={`sidebar ${isSidebarOpen ? 'sidebar-open' : ''}`}>
+  function renderSidebar(user: AuthUser, inDialog = false) {
+    return (
+      <>
         <div className="brand-lockup">
           <div className="brand-mark" aria-hidden="true"><span>D</span></div>
           <div className="brand-copy">
             <span className="brand-name">DCMS</span>
-            <span className="brand-caption">DOCUMENT CONTROL</span>
+            <span className="brand-caption">Document control</span>
           </div>
-          <button className="mobile-close icon-button" type="button" onClick={() => setSidebarOpen(false)} aria-label="Close navigation">
-            <Icon name="chevron" />
-          </button>
+          {inDialog && (
+            <button className="icon-button nav-close" type="button" onClick={() => navDialogRef.current?.close()} aria-label="Close navigation">
+              <Icon name="close" size={18} />
+            </button>
+          )}
         </div>
 
         <div className="institution-switcher">
           <div className="institution-avatar"><Icon name="building" size={17} /></div>
           <div className="institution-copy">
-            <span className="institution-label">ONP WORKSPACE</span>
-            <strong>Ospital ng Palawan setup needed</strong>
+            <span className="institution-label">INSTITUTION</span>
+            <strong>Ospital ng Palawan</strong>
+            <span className="institution-status">Setup required</span>
           </div>
-          <Icon name="chevron" size={15} />
         </div>
 
         <nav className="side-navigation" aria-label="Main navigation">
           <span className="nav-section-label">WORKSPACE</span>
           {renderNav(visibleMainNavigation)}
-
-          <span className="nav-section-label admin-label">ADMINISTRATION</span>
-          {authUser.is_system_admin && renderNav(adminNavigation)}
+          {user.is_system_admin && (
+            <>
+              <span className="nav-section-label admin-label">ADMINISTRATION</span>
+              {renderNav(adminNavigation)}
+            </>
+          )}
         </nav>
 
         <div className="sidebar-bottom">
           <div className="offline-card">
             <div className="offline-icon"><Icon name="shield" size={16} /></div>
             <div>
-              <strong>Private by design</strong>
-              <span>Built for your local network</span>
+              <strong>Local network</strong>
+              <span>No internet required</span>
             </div>
-            <span className="status-dot" aria-label="Local mode" />
+            <span className="status-dot" aria-hidden="true" />
           </div>
           <div className="sidebar-user">
-            <div className="avatar avatar-user" aria-hidden="true">{authUser.name.slice(0, 1).toUpperCase()}</div>
+            <div className="avatar avatar-user" aria-hidden="true">{user.name.slice(0, 1).toUpperCase()}</div>
             <div className="sidebar-user-copy">
-              <strong>{authUser.name}</strong>
-              <span>{authUser.is_system_admin ? 'System administrator' : authUser.roles.map((role) => role.name).join(', ') || 'DCMS user'}</span>
+              <strong>{user.name}</strong>
+              <span>{user.is_system_admin ? 'System administrator' : user.roles.map((role) => role.name).join(', ') || 'DCMS user'}</span>
             </div>
-            <button className="icon-button user-menu-button" type="button" onClick={() => void handleLogout()} disabled={authBusy} aria-label="Sign out" title="Sign out">
-              <span className="more-dots">⇥</span>
+            <button className="sidebar-signout" type="button" onClick={() => void handleLogout()} disabled={authBusy}>
+              {authBusy ? 'Signing out…' : 'Sign out'}
             </button>
           </div>
         </div>
+      </>
+    )
+  }
+
+  return (
+    <div className="app-shell">
+      <aside className="sidebar surface-glass">
+        {renderSidebar(authUser)}
       </aside>
 
-      {isSidebarOpen && <button className="sidebar-backdrop" type="button" aria-label="Close navigation" onClick={() => setSidebarOpen(false)} />}
+      <dialog
+        ref={navDialogRef}
+        id="nav-dialog"
+        tabIndex={-1}
+        className="nav-dialog surface-glass"
+        aria-label="Navigation"
+        onClick={handleNavBackdrop}
+        onClose={() => {
+          setNavOpen(false)
+          // WebKit does not restore focus to the invoker on dialog close.
+          requestAnimationFrame(() => {
+            const active = document.activeElement
+            if (!active || active === document.body || navDialogRef.current?.contains(active)) navTriggerRef.current?.focus()
+          })
+        }}
+      >
+        {renderSidebar(authUser, true)}
+      </dialog>
 
       <main className="main-area">
-        <header className="topbar">
+        <header className="topbar surface-glass">
           <div className="topbar-left">
-            <button className="mobile-menu icon-button" type="button" onClick={() => setSidebarOpen(true)} aria-label="Open navigation">
-              <span className="menu-lines"><i /><i /><i /></span>
+            <button ref={navTriggerRef} className="mobile-menu icon-button" type="button" onClick={openNav} aria-label="Open navigation" aria-haspopup="dialog" aria-controls="nav-dialog" aria-expanded={isNavOpen}>
+              <span className="menu-lines" aria-hidden="true"><i /><i /><i /></span>
             </button>
-            <div className="breadcrumb"><span>Workspace</span><Icon name="chevron" size={13} /><strong>{currentPage.eyebrow}</strong></div>
           </div>
           <div className="topbar-actions">
-            <div className="environment-pill"><span /> DEVELOPMENT PREVIEW</div>
             <NotificationCenter />
-            <div className="top-user-avatar" aria-label={`Signed in as ${authUser.name}`}>{authUser.name.slice(0, 1).toUpperCase()}</div>
+            <span className="top-user-avatar" aria-hidden="true">{authUser.name.slice(0, 1).toUpperCase()}</span>
+            <span className="sr-only">Signed in as {authUser.name}</span>
           </div>
         </header>
 
         <div className="page-content">
           <section className="welcome-row">
-            <div>
-              <div className="eyebrow"><span className="eyebrow-line" />{currentPage.eyebrow}</div>
-              <h1>{activePage === 'overview' ? <>Your documents,<br className="title-break" /> <em>under control.</em></> : currentPage.title}</h1>
-              <p className="page-description">{currentPage.description}</p>
-            </div>
+            <h1>{pageTitle}</h1>
             <div className="welcome-actions">
               {permissions.has('document.registry.view') && <button className="button button-secondary" type="button" onClick={() => navigate('registry')}><Icon name="search" size={16} /> Find a document</button>}
-              {authUser.is_system_admin && <button className="button button-primary" type="button" onClick={() => navigate('organization')}><Icon name="plus" size={17} /> Set up ONP</button>}
+              {authUser.is_system_admin && <button className="button button-primary" type="button" onClick={() => navigate('organization')}><Icon name="plus" size={17} /> Set up institution</button>}
             </div>
           </section>
 
-          {isNoticeVisible && <div className="preview-notice" role="status">
-            <div className="preview-notice-icon"><Icon name="spark" size={17} /></div>
-            <p><strong>Foundation preview</strong><span>This workspace has no live records yet. Data and actions will appear as the DCMS modules are connected.</span></p>
-            <button type="button" className="notice-dismiss" onClick={() => setNoticeVisible(false)} aria-label="Dismiss preview notice">×</button>
-          </div>}
-
           {visibleMainNavigation.some((item) => item.id === activePage) && (activePage === 'registry' || activePage === 'tasks' || activePage === 'workflows') ? <DocumentRegistry /> : visibleMainNavigation.some((item) => item.id === activePage) && activePage === 'distribution' ? <DistributionInbox /> : visibleMainNavigation.some((item) => item.id === activePage) && activePage === 'migration' ? <DocumentMigration /> : visibleMainNavigation.some((item) => item.id === activePage) && activePage === 'external-references' ? <ExternalReferences /> : visibleMainNavigation.some((item) => item.id === activePage) && activePage === 'records' ? <OperationalRecords /> : visibleMainNavigation.some((item) => item.id === activePage) && activePage === 'reports' ? <ReportsDashboard /> : activePage === 'organization' && authUser.is_system_admin ? <InstitutionConfiguration /> : activePage === 'access' && authUser.is_system_admin ? <UserAdministration /> : activePage === 'document-configuration' && authUser.is_system_admin ? <DocumentConfiguration /> : activePage === 'settings' && authUser.is_system_admin ? <WorkflowConfiguration /> : activePage === 'overview' ? (
             <>
-              <section className="metric-grid" aria-label="Role dashboard">
-                {dashboardWidgets.map((widget) => <article className="metric-card" key={widget.key}><div className="metric-copy"><span>{widget.label}</span><strong>{widget.count ?? '—'}</strong><small>{authUser.is_system_admin ? 'System settings only' : dashboardScope.join(', ') || (authUser.has_distributions ? 'My recipient inbox' : 'No document scope assigned')}</small></div></article>)}
-              </section>
-              <section className="metric-grid" aria-label="Document control metrics">
-                {metrics.map((metric) => (
-                  <article className="metric-card" key={metric.label}>
-                    <div className={`metric-icon metric-${metric.tone}`}><Icon name={metric.icon} size={18} /></div>
-                    <div className="metric-copy">
-                      <span>{metric.label}</span>
-                      <strong>—</strong>
-                      <small>Available when records are connected</small>
-                    </div>
-                  </article>
-                ))}
+              <section className="summary-strip" aria-labelledby="summary-strip-heading" aria-busy={dashboardState === 'loading'}>
+                <h2 className="sr-only" id="summary-strip-heading">Summary for your role</h2>
+                {dashboardState === 'error' ? (
+                  <p className="summary-message" role="alert">Summary counts could not be loaded. <button className="text-button" type="button" onClick={loadDashboard}>Retry</button></p>
+                ) : dashboardState === 'ready' && dashboardWidgets.length === 0 ? (
+                  <p className="summary-message">No summary counts are available for this role yet.</p>
+                ) : (
+                  <div className="summary-cells">
+                    {(dashboardState === 'loading' ? Array.from({ length: 4 }, (_, index) => ({ key: `pending-${index}`, label: '', count: null })) : dashboardWidgets).map((widget) => (
+                      <article className="summary-cell" key={widget.key}>
+                        <span className="summary-label">{widget.label || 'Loading count'}</span>
+                        <strong className="summary-figure">{widget.count ?? '—'}</strong>
+                        <small className="summary-note">{widget.count === 0 ? 'No records yet' : widget.count === null ? (dashboardState === 'loading' ? 'Loading' : 'Unavailable') : ''}</small>
+                      </article>
+                    ))}
+                  </div>
+                )}
               </section>
 
               <section className="dashboard-grid">
@@ -453,8 +515,7 @@ function App() {
                   </div>
                   <div className="empty-activity">
                     <div className="empty-illustration"><div className="empty-doc"><span /><span /><span /></div><div className="empty-clock"><Icon name="clock" size={17} /></div></div>
-                    <strong>No activity to show yet</strong>
-                    <span>Document events will appear here as your team starts using the system.</span>
+                    <strong>No activity recorded yet.</strong>
                   </div>
                 </article>
 
@@ -484,7 +545,7 @@ function App() {
                     <div><h2>Assigned to me</h2><p>Your review and approval queue</p></div>
                     <button className="text-button" type="button" onClick={() => navigate('tasks')}>Open tasks <Icon name="chevron" size={14} /></button>
                   </div>
-                  <div className="task-empty"><div className="task-empty-icon"><Icon name="inbox" size={20} /></div><span>No pending tasks</span><small>New assignments will be listed here.</small></div>
+                  <div className="task-empty"><div className="task-empty-icon"><Icon name="inbox" size={20} /></div><span>No tasks assigned yet.</span></div>
                 </article>}
                 {canSeeTasks && <article className="panel principle-panel">
                   <div className="principle-top"><div className="principle-icon"><Icon name="shield" size={18} /></div><span>DCMS PRINCIPLE</span></div>
@@ -497,19 +558,11 @@ function App() {
           ) : (
             <section className="module-placeholder panel">
               <div className="placeholder-icon"><Icon name={mainNavigation.concat(adminNavigation).find((item) => item.id === activePage)?.icon ?? 'files'} size={22} /></div>
-              <span className="placeholder-kicker">MODULE FOUNDATION</span>
-              <h2>{currentPage.title} is being prepared</h2>
-              <p>This section is part of the approved DCMS scope. Its records and controls will be connected as the foundation is implemented.</p>
-              <div className="placeholder-rule" />
-              <div className="placeholder-note"><Icon name="shield" size={16} /><span>Institution settings, authority rules, and source codes will remain configurable.</span></div>
+              <p>This module is not connected to live records yet.</p>
               <button className="button button-secondary" type="button" onClick={() => navigate('overview')}>Return to overview</button>
             </section>
           )}
 
-          <footer className="page-footer">
-            <span>DCMS <b>·</b> Institutional Document Control</span>
-            <span><i /> Local-network ready <b>·</b> Foundation preview</span>
-          </footer>
         </div>
       </main>
     </div>
