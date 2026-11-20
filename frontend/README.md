@@ -1,6 +1,6 @@
 # DCMS Frontend
 
-React + TypeScript + Vite foundation for the Ospital ng Palawan Document Control Management System (ONP DCMS).
+Web client for the Ospital ng Palawan Document Control Management System (ONP DCMS).
 
 ## Local development
 
@@ -9,7 +9,7 @@ npm install
 npm run dev
 ```
 
-The current interface is a responsive foundation preview. It now uses Laravel session authentication for sign-in, sign-out, and required password changes. Document modules remain previews; their navigation does not create or change records.
+The interface uses Laravel session authentication for sign-in, sign-out, and required password changes. Every navigation entry calls its Laravel API and opens its own view; there is no placeholder module.
 
 ## Project constraints
 
@@ -25,25 +25,52 @@ The current interface is a responsive foundation preview. It now uses Laravel se
 - System-administrator page for configuring document type labels and hierarchical categories; code values are stored as entered while D-019 remains open.
 - Overview empty state that does not invent institution or document data.
 - Setup links for ONP, access, and configurable workflow areas.
-- Native system font fallbacks; the interface makes no external font request.
+- Self-hosted Archivo and Source Serif 4; the interface makes no external font request.
 - Vite forwards local `/api` requests to the Laravel development server at `127.0.0.1:8000`.
 
 The Laravel API exposes `GET /api/health` and the account routes described in
-[`backend/README_AUTHENTICATION.md`](../backend/README_AUTHENTICATION.md). Document
-workflows, scoped role assignment, and graphical user administration are not
-implemented yet.
+[`backend/README_AUTHENTICATION.md`](../backend/README_AUTHENTICATION.md). Workflow
+templates are configurable; workflow execution and task assignment remain
+deferred.
 
-For local development, start Laravel from the repository root:
+## Local development and tests
 
-```powershell
-.\.local-tools\php-8.5.12\php.exe .\backend\artisan serve --host=127.0.0.1 --port=8000
+PHP 8.4+ is required. When the ignored `.local-tools/php-8.5.12` runtime is
+present, the script uses it automatically.
+
+```bash
+bash backend/scripts/dev-local.sh
 ```
 
-In a second terminal, start Vite:
+The script creates `backend/database/local-dev.sqlite`, applies migrations, seeds
+ONP roles, creates the disposable local account `admin@dcms.local`, writes its
+generated password to `backend/.env.dev-local`, and serves `/api` on
+`http://127.0.0.1:8000`. The account command refuses to run in production or
+against a non-SQLite database.
 
-```powershell
-Set-Location frontend
-npm.cmd run dev
+Start Vite in a second terminal:
+
+```bash
+cd frontend && npm run dev
+```
+
+Headless Chromium smoke tests (Playwright starts both servers):
+
+```bash
+cd frontend && npm run test:e2e
+```
+
+The suite runs on Chromium, Firefox, and WebKit. It signs in, checks the shell,
+measures glass text contrast against rendered pixels, exercises the mobile drawer
+(Escape, backdrop, focus return), validates the auth form and rate limiter, checks the
+notification popover and its no-Popover fallback, and covers the overview summary strip
+and the registry table (keyboard `Details` row, sticky header, 1280 and 1024 widths).
+Screenshots and contrast results are written to `frontend/e2e/screenshots/` (ignored).
+
+Re-seed sample notifications without touching the rest of the database:
+
+```bash
+bash backend/scripts/dev-local.sh --notifications-only
 ```
 
 Vite forwards `/api` requests to Laravel. Local runtimes and MySQL are kept under
