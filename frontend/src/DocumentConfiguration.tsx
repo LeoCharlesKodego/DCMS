@@ -209,9 +209,9 @@ export default function DocumentConfiguration() {
             <div className="panel-heading"><div><h2>Document types</h2><p>Names and optional source codes</p></div><span className="setup-progress">{types.length}</span></div>
             <form className="config-form" onSubmit={(event) => void saveType(event)}>
               <label className="auth-label" htmlFor="type-name">Name</label>
-              <input className="auth-input" id="type-name" value={typeForm.name} onChange={(event) => setTypeForm({ ...typeForm, name: event.target.value })} maxLength={255} required />
+              <input className="auth-input" id="type-name" value={typeForm.name} onChange={(event) => setTypeForm({ ...typeForm, name: event.target.value })} maxLength={255} autoComplete="off" required />
               <label className="auth-label" htmlFor="type-code">Code (optional)</label>
-              <input className="auth-input" id="type-code" value={typeForm.code} onChange={(event) => setTypeForm({ ...typeForm, code: event.target.value })} maxLength={255} />
+              <input className="auth-input" id="type-code" value={typeForm.code} onChange={(event) => setTypeForm({ ...typeForm, code: event.target.value })} maxLength={255} autoComplete="off" spellCheck={false} />
               <label className="auth-label" htmlFor="type-description">Description</label>
               <textarea className="auth-input config-textarea" id="type-description" value={typeForm.description} onChange={(event) => setTypeForm({ ...typeForm, description: event.target.value })} maxLength={2000} />
               <label className="auth-label" htmlFor="type-flow">Approval flow profile</label>
@@ -237,7 +237,7 @@ export default function DocumentConfiguration() {
             <div className="panel-heading"><div><h2>Document categories</h2><p>Build a configurable parent and child structure</p></div><span className="setup-progress">{categories.length}</span></div>
             <form className="config-form" onSubmit={(event) => void saveCategory(event)}>
               <label className="auth-label" htmlFor="category-name">Name</label>
-              <input className="auth-input" id="category-name" value={categoryForm.name} onChange={(event) => setCategoryForm({ ...categoryForm, name: event.target.value })} maxLength={255} required />
+              <input className="auth-input" id="category-name" value={categoryForm.name} onChange={(event) => setCategoryForm({ ...categoryForm, name: event.target.value })} maxLength={255} autoComplete="off" required />
               <label className="auth-label" htmlFor="category-parent">Parent category</label>
               <select className="auth-input" id="category-parent" value={categoryForm.parent_id} onChange={(event) => setCategoryForm({ ...categoryForm, parent_id: event.target.value })}>
                 <option value="">Top level</option>
@@ -253,7 +253,7 @@ export default function DocumentConfiguration() {
             <div className="config-list" aria-label="Configured document categories">
               {categories.length === 0 ? <p className="config-empty">No document categories configured.</p> : categoryTree.map((category) => (
                 <div className="config-row" key={category.id}>
-                  <div className="config-row-copy" style={{ paddingLeft: `${categoryDepth(category, categories) * 15}px` }}><strong>{category.name}</strong><span>{category.is_active ? 'Active' : 'Inactive'}</span></div>
+                  <div className="config-row-copy" style={{ paddingInlineStart: `${categoryDepth(category, categories) * 15}px` }}><strong>{category.name}</strong><span>{category.is_active ? 'Active' : 'Inactive'}</span></div>
                   <button className="config-edit" type="button" onClick={() => { setEditingCategoryId(category.id); setCategoryForm({ parent_id: category.parent_id?.toString() ?? '', name: category.name, description: category.description ?? '', is_active: category.is_active }); setError(''); setNotice('') }}>Edit</button>
                 </div>
               ))}
