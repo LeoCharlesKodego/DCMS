@@ -38,8 +38,18 @@ export default function InstitutionConfiguration() {
   }
 
   useEffect(() => {
-    load().catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not load institution settings.'))
-      .finally(() => setLoading(false))
+    let active = true
+    void (async () => {
+      try {
+        await load()
+      } catch (reason) {
+        if (active) setError(reason instanceof Error ? reason.message : 'Could not load institution settings.')
+      } finally {
+        if (active) setLoading(false)
+      }
+    })()
+
+    return () => { active = false }
   }, [])
 
   async function submit(event: FormEvent<HTMLFormElement>, action: (form: FormData) => Promise<void>) {
@@ -84,15 +94,16 @@ export default function InstitutionConfiguration() {
         const result = await authUpload('/admin/institution', upload)
         setInstitution(result.data)
       })}>
-        <label className="auth-label">Institution name<input className="auth-input" name="name" required maxLength={255} defaultValue={institution.name} /></label>
-        <label className="auth-label">Short name<input className="auth-input" name="short_name" maxLength={80} defaultValue={institution.short_name ?? ''} /></label>
-        <label className="auth-label">Facility type<input className="auth-input" name="facility_type" maxLength={120} defaultValue={institution.facility_type ?? ''} /></label>
-        <label className="auth-label">Timezone<input className="auth-input" name="timezone" placeholder="e.g. Asia/Manila" defaultValue={institution.timezone ?? ''} /></label>
-        <label className="auth-label">Contact details<textarea className="auth-input config-textarea" name="contact_details" maxLength={2000} defaultValue={institution.contact_details ?? ''} /></label>
+        <label className="auth-label">Institution name<input className="auth-input" name="name" required maxLength={255} autoComplete="off" defaultValue={institution.name} /></label>
+        <label className="auth-label">Short name<input className="auth-input" name="short_name" maxLength={80} autoComplete="off" defaultValue={institution.short_name ?? ''} /></label>
+        <label className="auth-label">Facility type<input className="auth-input" name="facility_type" maxLength={120} autoComplete="off" defaultValue={institution.facility_type ?? ''} /></label>
+        <label className="auth-label">Timezone<input className="auth-input" name="timezone" placeholder="e.g. Asia/Manila" autoComplete="off" spellCheck={false} aria-describedby="institution-timezone-help" defaultValue={institution.timezone ?? ''} /></label>
+        <p className="form-hint" id="institution-timezone-help">{'A time zone name, for example Asia/Manila. It controls displayed timestamps.'}</p>
+        <label className="auth-label">Contact details<textarea className="auth-input config-textarea" name="contact_details" maxLength={2000} autoComplete="off" defaultValue={institution.contact_details ?? ''} /></label>
         <label className="auth-label">Institution status<select className="auth-input" name="status" defaultValue={institution.status}><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
         <label className="auth-label">Logo (PNG, JPG, or WebP; max 2 MB)<input className="auth-input" name="logo" type="file" accept="image/png,image/jpeg,image/webp" /></label>
         {institution.logo_path && <img className="institution-logo-preview" src={`/api/admin/institution/logo?version=${encodeURIComponent(institution.logo_path)}`} alt="Institution logo" />}
-        <button className="button button-primary" disabled={busy}>Save institution</button>
+        <button className="button button-primary" disabled={busy}>{busy ? 'Saving…' : 'Save institution'}</button>
       </form>
     </section>
 
@@ -116,11 +127,11 @@ export default function InstitutionConfiguration() {
               name: value(form, 'name'), unit_type: value(form, 'unit_type'), is_active: form.get('is_active') === 'on',
             })
           })}>
-            <label className="auth-label">Name<input className="auth-input" name="name" required maxLength={180} defaultValue={unit.name} /></label>
-            <label className="auth-label">Type<input className="auth-input" name="unit_type" required maxLength={80} defaultValue={unit.unit_type} /></label>
+            <label className="auth-label">Name<input className="auth-input" name="name" required maxLength={180} autoComplete="off" defaultValue={unit.name} /></label>
+            <label className="auth-label">Type<input className="auth-input" name="unit_type" required maxLength={80} autoComplete="off" defaultValue={unit.unit_type} /></label>
             <label className="auth-label">Parent<select className="auth-input" name="parent_id" defaultValue={unit.parent_id ?? ''}><option value="">No parent</option>{units.filter((candidate) => candidate.id !== unit.id && candidate.is_active).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name} · {candidate.unit_type}</option>)}</select></label>
             <label className="config-checkbox"><input type="checkbox" name="is_active" defaultChecked={unit.is_active} /> Active</label>
-            <div className="config-form-actions"><button className="config-edit" disabled={busy}>Save</button><button className="config-edit" type="button" onClick={() => setEditingId(null)}>Cancel</button></div>
+            <div className="config-form-actions"><button className="config-edit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button><button className="config-edit" type="button" onClick={() => setEditingId(null)}>Cancel</button></div>
           </form>
         ) : <div className="config-row" key={unit.id}>
           <div className="config-row-copy"><strong>{unit.name}</strong><span>{unit.unit_type}{unit.parent_name ? ` · under ${unit.parent_name}` : ' · top level'} · {unit.is_active ? 'Active' : 'Inactive'}</span></div>
@@ -133,9 +144,9 @@ export default function InstitutionConfiguration() {
 
 function UnitForm({ units, busy, onSubmit }: { units: Unit[]; busy: boolean; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
   return <form className="config-form" onSubmit={onSubmit}>
-    <label className="auth-label">Unit name<input className="auth-input" name="name" required maxLength={180} /></label>
-    <label className="auth-label">Level or type<input className="auth-input" name="unit_type" required maxLength={80} placeholder="Service, department, unit…" /></label>
+    <label className="auth-label">Unit name<input className="auth-input" name="name" required maxLength={180} autoComplete="off" /></label>
+    <label className="auth-label">Level or type<input className="auth-input" name="unit_type" required maxLength={80} placeholder="Service, department, unit…" autoComplete="off" /></label>
     <label className="auth-label">Parent unit<select className="auth-input" name="parent_id" defaultValue=""><option value="">No parent</option>{units.filter((unit) => unit.is_active).map((unit) => <option key={unit.id} value={unit.id}>{unit.name} · {unit.unit_type}</option>)}</select></label>
-    <button className="button button-primary" disabled={busy}>Add unit</button>
+    <button className="button button-primary" disabled={busy}>{busy ? 'Adding…' : 'Add unit'}</button>
   </form>
 }
