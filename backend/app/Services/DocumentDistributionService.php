@@ -232,7 +232,7 @@ class DocumentDistributionService
             ->map(function (DocumentDistribution $distribution) use ($viewer, $canManage, $today): array {
                 $recipients = $distribution->recipients
                     ->filter(fn (DistributionRecipient $recipient): bool => $canManage || (int) $recipient->user_id === (int) $viewer->id)
-                    ->map(function (DistributionRecipient $recipient) use ($today): array {
+                    ->map(function (DistributionRecipient $recipient) use ($today, $viewer, $canManage): array {
                         $status = $recipient->acknowledgment_status;
                         if ($status === 'pending' && $recipient->acknowledgment_required && $recipient->due_at !== null
                             && $recipient->due_at?->format('Y-m-d') < $today) {
