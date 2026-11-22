@@ -33,6 +33,7 @@ export default function DocumentRegistry() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
+  const [titleError, setTitleError] = useState('')
   const [decisionError, setDecisionError] = useState<{ taskId: number; message: string } | null>(null)
   const [titleSizePt, setTitleSizePt] = useState<number | null>(null)
   const [titleSettingHistory, setTitleSettingHistory] = useState<{ old_value: string | null; new_value: string; changed_by: string; changed_at: string }[]>([])
@@ -75,7 +76,7 @@ export default function DocumentRegistry() {
   const scopedCodes = useMemo(() => codes?.section_units.filter((item) => item.parent_service_id === Number(serviceId)) ?? [], [codes, serviceId])
 
   async function createDocument(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setBusy(true); setError(''); setNotice('')
+    event.preventDefault(); setBusy(true); setError(''); setNotice(''); setTitleError('')
     const formElement = event.currentTarget
     const form = new FormData(formElement)
     try {
@@ -87,7 +88,12 @@ export default function DocumentRegistry() {
         remarks: String(form.get('remarks') || '') || null,
       })
       formElement.reset(); await refresh(); setNotice('Document request added to the register, awaiting code assignment.')
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not create the document request.') }
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : 'Could not create the document request.'
+      // The server rejects a blank or whitespace-only title; report it on the field.
+      if (/title/i.test(message)) setTitleError(message)
+      else setError(message)
+    }
     finally { setBusy(false) }
   }
 
@@ -272,7 +278,7 @@ export default function DocumentRegistry() {
 
     {!!registry?.create_units.length && <form className="panel registry-create" onSubmit={createDocument}>
       <div className="panel-heading"><div><h2>Register a document</h2><p>Requests begin at revision 1.0 and await official code assignment.</p></div></div>
-      <label>Document title<input name="title" required maxLength={500} autoComplete="off" /></label>
+      <label>Document title<input name="title" required maxLength={500} autoComplete="off" aria-invalid={titleError ? true : undefined} aria-describedby={titleError ? 'register-title-error' : undefined} onChange={() => { if (titleError) setTitleError('') }} />{titleError && <p className="field-error" id="register-title-error" role="alert">{titleError}</p>}</label>
       <div className="registry-form-grid">
         <label>Document type<select name="document_type_id" required defaultValue=""><option value="" disabled>Select type</option>{registry.document_types.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <label>Category<select name="category_id" defaultValue=""><option value="">No category</option>{registry.categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>

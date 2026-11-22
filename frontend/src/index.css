@@ -47,6 +47,10 @@
   --space-12: 3rem;
   --space-section: clamp(1.5rem, 1rem + 1.5cqi, 2.5rem);
 
+  /* Layout chrome. The sticky top bar height is a token so scroll offsets can
+     stay clear of it; App.css mirrors the compact value at the mobile width. */
+  --topbar-height: 66px;
+
   /* Radius */
   --radius-xs: 2px;
   --radius-sm: 4px;

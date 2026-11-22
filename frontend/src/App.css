@@ -205,7 +205,22 @@ body:has(.nav-dialog[open]) {
 .mobile-menu { display: none; }
 
 .main-area { min-block-size: 100dvh; margin-inline-start: 258px; }
-.topbar { position: sticky; z-index: 10; top: 0; display: flex; height: 66px; align-items: center; justify-content: space-between; padding: 0 42px; border-width: 0 0 1px; border-radius: 0; box-shadow: none; }
+.topbar { position: sticky; z-index: 10; top: 0; display: flex; height: var(--topbar-height); align-items: center; justify-content: space-between; padding: 0 42px; border-width: 0 0 1px; border-radius: 0; box-shadow: none; }
+/* The top bar is sticky over the page and the register's own scroller. Reserve its
+   height when the browser scrolls a focused row or control into view, so nothing
+   lands underneath it. */
+html { scroll-padding-block-start: var(--topbar-height); }
+.registry-table-wrap { scroll-padding-block-start: var(--topbar-height); }
+.registry-table-wrap,
+.registry-table tbody tr,
+.registry-table tbody th,
+.registry-table tbody td,
+.registry-table a,
+.registry-table button,
+.registry-table summary,
+.registry-table input,
+.registry-table select,
+.registry-table textarea { scroll-margin-block-start: var(--topbar-height); }
 .topbar-left, .topbar-actions { display: flex; align-items: center; }
 .topbar-actions { gap: 20px; }
 .top-icon-button { position: relative; display: grid; width: 29px; height: 29px; place-items: center; border: 0; background: transparent; color: var(--ink-muted); }
@@ -222,6 +237,12 @@ h1 em { color: var(--seal); font-weight: 500; }
 .button { display: inline-flex; min-height: 2.5rem; align-items: center; justify-content: center; gap: 8px; padding: 0 var(--space-3); border: 1px solid transparent; border-radius: var(--radius-sm); cursor: pointer; font: inherit; font-size: var(--text-xs); font-weight: 650; transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
 .button-primary { border-color: var(--seal); background: var(--seal); box-shadow: 0 3px 7px rgb(21 45 60 / 12%); color: var(--on-seal); }
 .button-primary:hover { background: var(--seal-strong); }
+/* Forced-colours mode replaces the palette; keep the primary action distinguishable
+   while using the system Highlight pair, which guarantees a readable contrast. */
+@media (forced-colors: active) {
+  .button-primary { border-color: ButtonText; background-color: Highlight; color: HighlightText; }
+  .button-primary:hover { background-color: Highlight; }
+}
 .button-secondary { border-color: var(--rule); background: var(--surface); color: var(--ink); }
 .button-secondary:hover { background: var(--surface-sunken); }
 
@@ -390,7 +411,8 @@ h1 em { color: var(--seal); font-weight: 500; }
   .auth-shell { padding: 15px; }
   .auth-card { padding: 25px 21px; }
   .auth-brand { margin-bottom: 29px; }
-  .topbar { height: 57px; padding: 0 17px; }
+  :root { --topbar-height: 57px; }
+  .topbar { padding: 0 17px; }
   .topbar-actions { gap: 12px; }
   .page-content { padding: 29px 17px 16px; }
   .welcome-row { gap: 16px; }
@@ -555,7 +577,11 @@ h1 em { color: var(--seal); font-weight: 500; }
 @media (max-width: 760px) { .workflow-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .workflow-form-grid, .workflow-role-list { grid-template-columns: 1fr; } .workflow-template-heading, .workflow-version-row { flex-direction: column; } .workflow-template-actions { flex-wrap: wrap; } }
 .audit-event-mark { width: 9px; height: 9px; margin-top: 4px; border-radius: 50%; background: var(--seal); }
-.audit-event > div { display: grid; gap: 4px; }
+.audit-event > div { display: grid; min-inline-size: 0; gap: 4px; }
+/* Finding details carry unbroken JSON and hashes; they must wrap rather than widen
+   the page at narrow widths. */
+.audit-event ul { margin: 0; padding-inline-start: 1.1em; }
+.audit-event li { overflow-wrap: anywhere; }
 .audit-event p, .audit-event small { margin: 0; color: var(--ink-muted); font-size: 12px; }
 .audit-event time { color: var(--ink-muted); font-size: var(--text-xs); text-align: right; white-space: nowrap; }
 .audit-event time small { display: block; margin-top: 4px; }
