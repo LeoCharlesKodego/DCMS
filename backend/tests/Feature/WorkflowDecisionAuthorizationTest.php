@@ -18,12 +18,21 @@ use App\Models\WorkflowTemplate;
 use App\Services\WorkflowDecisionService;
 use App\Services\WorkflowInstanceService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Session\Middleware\AuthenticateSession;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\TestCase;
 
 class WorkflowDecisionAuthorizationTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // The suite signs in several actors per test; the session guard would otherwise
+        // keep the first actor's identity for later requests.
+        $this->withoutMiddleware(AuthenticateSession::class);
+    }
 
     public function test_workflow_decision_endpoint_requires_authentication(): void
     {
@@ -236,6 +245,89 @@ class WorkflowDecisionAuthorizationTest extends TestCase
             'source_group' => 'Test fixture',
             'is_conflicted' => false,
             'is_active' => true,
+        ]);
+    }
+
+    public function test_a_review_stage_assigns_and_accepts_the_owning_division_head(): void
+    {
+        $owner = $this->user('division-owner@example.test');
+        $divisionHead = $this->user('division-head@example.test');
+        $outsideHead = $this->user('outside-division-head@example.test');
+        $unit = OrganizationalUnit::query()->create(['name' => 'Owning Division', 'unit_type' => 'division', 'is_active' => true]);
+        $otherUnit = OrganizationalUnit::query()->create(['name' => 'Other Division', 'unit_type' => 'division', 'is_active' => true]);
+        $documentType = DocumentType::query()->create(['code' => 'PROC', 'name' => 'Procedure', 'is_active' => true]);
+
+        $document = Document::query()->create([
+            'document_type_id' => $documentType->id,
+            'owner_user_id' => $owner->id,
+            'owning_unit_id' => $unit->id,
+            'created_by_user_id' => $owner->id,
+            'title' => 'Division Head review procedure',
+            'current_revision_label' => '1.0',
+            'status' => 'under_revision',
+        ]);
+        $version = $document->versions()->create([
+            'sequence_no' => 1,
+            'revision_label' => '1.0',
+            'status' => 'in_review',
+            'created_by_user_id' => $owner->id,
+        ]);
+
+        $divisionHeadRole = Role::query()->create(['code' => 'DIVISION_HEAD', 'name' => 'Division Head', 'is_active' => true]);
+        foreach (['document.review.division_head', 'document.registry.view'] as $permissionCode) {
+            $divisionHeadRole->permissions()->attach(Permission::query()->firstOrCreate(
+                ['code' => $permissionCode],
+                ['description' => $permissionCode.' test permission.'],
+            )->id, ['scope_type' => 'organizational_unit']);
+        }
+        $divisionHead->roleAssignments()->create(['role_id' => $divisionHeadRole->id, 'organizational_unit_id' => $unit->id, 'work_scope' => 'Owning division', 'valid_from' => now()->toDateString()]);
+        $outsideHead->roleAssignments()->create(['role_id' => $divisionHeadRole->id, 'organizational_unit_id' => $otherUnit->id, 'work_scope' => 'Other division', 'valid_from' => now()->toDateString()]);
+
+        $template = WorkflowTemplate::query()->create(['template_key' => 'division-head-review', 'name' => 'Division Head review', 'is_active' => true, 'created_by_user_id' => $owner->id]);
+        $templateVersion = $template->versions()->create([
+            'version_no' => 1,
+            'document_type_id' => $documentType->id,
+            'trigger_event' => 'version.submitted',
+            'status' => 'published',
+            'published_by_user_id' => $owner->id,
+            'published_at' => now(),
+        ]);
+        $reviewStage = $templateVersion->stages()->create([
+            'stage_key' => 'division-head-review', 'name' => 'Division Head review', 'stage_order' => 1,
+            'action_type' => 'review', 'is_mandatory' => true, 'required_decisions' => 1,
+        ]);
+        $reviewStage->eligibleRoles()->attach($divisionHeadRole->id, ['scope_type' => 'organizational_unit']);
+
+        $instance = $version->workflowInstance()->create([
+            'workflow_template_version_id' => $templateVersion->id,
+            'status' => 'in_progress',
+            'started_by_user_id' => $owner->id,
+            'started_at' => now(),
+        ]);
+        $stageInstance = $instance->stages()->create([
+            'workflow_template_stage_id' => $reviewStage->id, 'pass_no' => 1,
+            'status' => 'active', 'started_at' => now(),
+        ]);
+        $task = $stageInstance->tasks()->create([
+            'role_id' => $divisionHeadRole->id,
+            'organizational_unit_id' => $unit->id,
+            'status' => 'pending',
+            'assigned_at' => now(),
+        ]);
+
+        $this->actingAs($outsideHead)
+            ->postJson("/api/workflow-tasks/{$task->id}/decisions", ['decision_type' => 'reviewed'])
+            ->assertForbidden();
+
+        $this->actingAs($divisionHead)
+            ->postJson("/api/workflow-tasks/{$task->id}/decisions", ['decision_type' => 'reviewed'])
+            ->assertCreated()
+            ->assertJsonPath('data.actor_user_id', $divisionHead->id);
+
+        $this->assertDatabaseHas('workflow_decisions', [
+            'workflow_task_id' => $task->id,
+            'actor_user_id' => $divisionHead->id,
+            'decision_type' => 'reviewed',
         ]);
     }
 
