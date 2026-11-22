@@ -15,7 +15,11 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        // Never seed a sign-in account with a known password outside a
+        // disposable local or test database.
+        if (! app()->environment(['local', 'testing'])) {
+            return;
+        }
 
         User::factory()->create([
             'name' => 'Test User',
