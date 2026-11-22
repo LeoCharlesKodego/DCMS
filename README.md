@@ -60,3 +60,90 @@ When documents conflict, use this precedence:
 The AI must not silently resolve a conflict by inventing a requirement.
 
 
+
+## Local development environment
+
+The committed repository contains no PHP runtime and no `backend/.env`. Both are
+ignored on purpose and must be recreated on a new machine. Verified versions:
+
+| Tool | Version used | Notes |
+|---|---|---|
+| PHP | 8.5.12 NTS x64 | The dev scripts look for `.local-tools/php-8.5.12/php.exe`. PHP 8.4.1 or newer works when `PHP_BIN` is set. |
+| Composer | 2.11.2 | Installed as `.local-tools/composer.phar`. |
+| Node.js | 26.13.1 | `frontend/package.json` uses Vite 8 and TypeScript 7. |
+| npm | 11.20.0 | |
+| Database | SQLite for local tests | The approved production engine is MySQL 8.4 (D-006); feature tests and the local harness use SQLite. |
+| Playwright | 1.65.1 | Chromium, Firefox, and WebKit. |
+
+### Recreating the PHP runtime
+
+```bash
+# 1. The zip, extracted so php.exe is at .local-tools/php-8.5.12/php.exe
+curl -L -o php.zip https://windows.php.net/downloads/releases/archives/php-8.5.12-nts-Win32-vs17-x64.zip
+unzip php.zip -d .local-tools/php-8.5.12
+
+# 2. The extension DLLs must sit next to php.exe: Windows resolves their dependent
+#    DLLs (libsqlite3, libcrypto, ...) from the PHP root, not from ext/.
+cd .local-tools/php-8.5.12
+for e in curl fileinfo gd intl mbstring openssl pdo_sqlite sqlite3 zip; do
+  cp "ext/php_$e.dll" .
+done
+```
+
+`.local-tools/php-8.5.12/php-test.ini` is also ignored. It must enable the
+extensions Laravel and SQLite need and point `extension_dir` at the PHP root
+(`D:/...` or the absolute path of the checkout):
+
+```ini
+extension_dir = "D:/DCMS/.local-tools/php-8.5.12"
+extension=curl
+extension=fileinfo
+extension=gd
+extension=intl
+extension=mbstring
+extension=openssl
+extension=pdo_sqlite
+extension=sqlite3
+extension=zip
+memory_limit = 512M
+```
+
+If `php -m` reports `VCRUNTIME140.dll ... is not compatible`, install the current
+Microsoft Visual C++ 2015-2022 Redistributable (x64).
+
+Composer:
+
+```bash
+curl -L -o composer-setup.php https://getcomposer.org/installer
+PHPRC="D:/DCMS/.local-tools/php-8.5.12/php-test.ini" \
+  .local-tools/php-8.5.12/php.exe composer-setup.php \
+  --install-dir=.local-tools --filename=composer.phar
+```
+
+### Recreating `backend/.env`
+
+`backend/scripts/dev-local.sh` exports the SQLite and local-server settings for the
+run, but Laravel still needs an application key:
+
+```bash
+cd backend
+cp .env.example .env
+PHPRC="D:/DCMS/.local-tools/php-8.5.12/php-test.ini" \
+  ../.local-tools/php-8.5.12/php.exe artisan key:generate
+```
+
+`APP_KEY` is the only value that must be generated. The script overrides
+`APP_ENV`, `APP_URL`, `DB_CONNECTION`, `DB_DATABASE`, `SESSION_DRIVER`,
+`CACHE_STORE`, and `QUEUE_CONNECTION`, and writes the disposable local account
+password to `backend/.env.dev-local` (also ignored). See `frontend/README.md` for
+starting the API and client.
+
+### Install and test
+
+```bash
+cd backend && php ../.local-tools/composer.phar install
+cd ../frontend && npm install && npx playwright install chromium firefox webkit
+cd .. && bash backend/scripts/dev-local.sh --prepare-only
+cd frontend && npm run build && npx playwright test
+cd ../backend && php artisan test
+```
