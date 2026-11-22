@@ -718,4 +718,25 @@ Administration forms, workflow configuration, reports, and the remaining modules
 **Reported, not changed**
 
 - `Replace current files` is unreachable from the detail row: it requires `canUpload` (only when the latest version is released or absent) and a version in `draft`/`returned_for_revision`, and those conditions never hold together. The form is left in place and reported rather than silently deleted; fixing it is a product decision.
-- The sticky top bar can cover a control at the top of the register’s internal scroller. Tests drive those controls with the keyboard, which works, but a pointer user scrolling a long detail row can still meet the overlap.
+- The sticky top bar could cover a control at the top of the register’s internal scroller. **Fixed in §10.11.**
+
+### 10.11 Step 0 fixes and gaps (before Phase 3, step 4)
+
+**Fixed**
+
+- Sticky top bar: the bar height is now the `--topbar-height` token (66 px, 57 px below 680 px). `html` and the register scroller reserve it with `scroll-padding-block-start`, and the scroller plus every focusable row/control carries `scroll-margin-block-start` from the same token. Tabbing backwards onto the register no longer lands it under the bar. A browser test now parks the scroller behind the bar, reaches it with plain Tab, and compares its bounding box with the bar’s.
+- Register title: a blank or whitespace-only title is now reported on the field (`#register-title-error`, `aria-invalid`, `aria-describedby`) instead of only in the top-level message, and clears on input.
+- Forced colours: `.button-primary` uses the system `Highlight`/`HighlightText` pair so the primary action keeps a passing contrast when the palette is replaced.
+- Reflow at 320 px (400 % zoom): whole findings strings in the submission-check list now wrap, so the register and review screens no longer push the page 11 px wide in Firefox.
+
+**Added test coverage (no mocks; real API and seeded records unless noted)**
+
+- Backend: `DocumentRegistryAccessTest` asserts `GET /api/documents` returns 200 with a distributed version present for MCC, QMR, KMT, Process Owner, Division Head, Department Head, and Service Chief, and for a system administrator holding a KMT assignment; it keeps 403 for a technical administrator and an ordinary account with no document-control role (all seven seeded roles plus the two denials). `DocumentCodeAssignmentTest` covers the code-assignment audit fix and the permission denial. A Division Head review-stage test was added to `WorkflowDecisionAuthorizationTest`. Each was verified to fail when its fix is reverted.
+- Browser: `lifecycle-real-data.spec.ts` adds a register entry (with the blank-title field error), acknowledges a distributed version from the receipt inbox, and drives one document through submit → KMT verification → Division Head review → MCC approval → effective-date proposal and confirmation → release, asserting the register stamp (`Active`), version stamp (`Released`), and audit history. The confirmation step runs as `kmt.release@example.test`, and the verification step asserts the empty return-reason field error.
+- Accessibility: the axe pass now also opens the navigation dialog and the notification popover; it covers `prefers-reduced-motion: reduce` (with computed durations collapsed), forced colours in Chromium, and a 320 px reflow check across all 13 screens asserting no page-level horizontal scroll.
+
+**Reported, not changed**
+
+- `GET /api/documents` still returns 403 for an ordinary account with no ONP document-control role, and for a system administrator without a role assignment. That is the approved rule (D-008, business rule 17, `Phase4BRoleAccessTest`); making it return 200 for those accounts is an authorization change awaiting a decision.
+- `Replace current files` remains unreachable, and this now looks like a frontend logic bug rather than dead code. The form renders when `canUpload && version.status in {draft, returned_for_revision}`, but `canUpload` requires the *latest* version to be `released` or absent, so the two conditions can never hold for the same version. The backend accepts replacement on a draft/returned version for a Process Owner of the owning unit (409 otherwise), which matches D-031. Fixing it means gating the form on the unit scope and the version status only; left untouched pending a decision.
+- No document lifecycle `obsolete` action exists. `DocumentLifecycleService` offers submit, start/complete review, department-head and service-chief review, return, approve, propose/confirm effective date, and release; release marks a previously released version `superseded`. The only `obsolete` value in the system is a document-migration verification status. No obsolete-transition test was written and no transition was invented.
