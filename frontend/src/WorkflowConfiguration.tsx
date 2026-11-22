@@ -56,8 +56,18 @@ export default function WorkflowConfiguration() {
   }
 
   useEffect(() => {
-    load().catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not load workflow templates.'))
-      .finally(() => setLoading(false))
+    let active = true
+    void (async () => {
+      try {
+        await load()
+      } catch (reason) {
+        if (active) setError(reason instanceof Error ? reason.message : 'Could not load workflow templates.')
+      } finally {
+        if (active) setLoading(false)
+      }
+    })()
+
+    return () => { active = false }
   }, [])
 
   function resetForm() {
