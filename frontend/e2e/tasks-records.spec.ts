@@ -89,6 +89,7 @@ test('Records & retention lists records as a table and records a hold', async ({
   await registerForm.getByLabel('Record type').fill('Fictional routine report')
   await registerForm.getByLabel('Title', { exact: true }).fill(RECORD_TITLE)
   await registerForm.getByLabel('Reference number').fill('FICT-BROWSER-001')
+  await registerForm.getByLabel('Retention trigger date').fill('2026-11-01')
   await registerForm.getByRole('button', { name: 'Save record metadata' }).click()
   await expect(page.getByRole('status')).toContainText('Operational record metadata saved.')
 
@@ -101,6 +102,7 @@ test('Records & retention lists records as a table and records a hold', async ({
   const row = table.locator('tbody tr').filter({ hasText: RECORD_TITLE }).first()
   await expect(row.locator('.stamp').first()).toHaveText(/Active/)
   await expect(row).toContainText('No holds')
+  await expect(row.locator('td.is-date').first()).not.toHaveText('—')
 
   await row.getByLabel(`Hold reason for ${RECORD_TITLE}`).fill('Fictional hold for the browser test.')
   await row.getByRole('button', { name: 'Place hold' }).click()
