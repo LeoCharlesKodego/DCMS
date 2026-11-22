@@ -9,8 +9,12 @@
 #   bash backend/scripts/dev-local.sh --prepare-only # prepare the database and account, then exit
 #   bash backend/scripts/dev-local.sh --serve-only   # serve without touching the database
 #   bash backend/scripts/dev-local.sh --notifications-only # refresh the sample notifications only
+#   bash backend/scripts/dev-local.sh --samples-only   # rebuild the fictional sample documents only
 #
 # The generated password is written to backend/.env.dev-local (gitignored).
+# Sample documents cover pending code, draft, returned for revision, and
+# released states; like the account command, the sample generator refuses
+# production and non-SQLite databases.
 
 set -euo pipefail
 
@@ -21,11 +25,13 @@ cd "$BACKEND"
 PREPARE=1
 SERVE=1
 NOTIFY_ONLY=0
+SAMPLES_ONLY=0
 for arg in "$@"; do
   case "$arg" in
     --prepare-only) SERVE=0 ;;
     --serve-only) PREPARE=0 ;;
     --notifications-only) PREPARE=0; SERVE=0; NOTIFY_ONLY=1 ;;
+    --samples-only) PREPARE=0; SERVE=0; SAMPLES_ONLY=1 ;;
     *) echo "Unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -89,6 +95,15 @@ if [ "$NOTIFY_ONLY" -eq 1 ]; then
   exit 0
 fi
 
+if [ "$SAMPLES_ONLY" -eq 1 ]; then
+  if [ ! -f "$DB_FILE" ]; then
+    echo "The local database is missing. Run backend/scripts/dev-local.sh --prepare-only first." >&2
+    exit 1
+  fi
+  "$PHP_BIN" artisan dcms:dev-sample-documents --no-interaction
+  exit 0
+fi
+
 if [ "$PREPARE" -eq 1 ]; then
   touch "$DB_FILE"
   "$PHP_BIN" artisan migrate --force --no-interaction
@@ -100,6 +115,7 @@ if [ "$PREPARE" -eq 1 ]; then
     --with-notifications \
     --role=KMT \
     --no-interaction
+  "$PHP_BIN" artisan dcms:dev-sample-documents --no-interaction
   echo "Local sign-in: $DCMS_DEV_EMAIL (password in backend/.env.dev-local)"
 fi
 
