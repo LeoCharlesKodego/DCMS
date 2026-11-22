@@ -43,8 +43,18 @@ export default function UserAdministration() {
   }
 
   useEffect(() => {
-    load().catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not load user access.'))
-      .finally(() => setLoading(false))
+    let active = true
+    void (async () => {
+      try {
+        await load()
+      } catch (reason) {
+        if (active) setError(reason instanceof Error ? reason.message : 'Could not load user access.')
+      } finally {
+        if (active) setLoading(false)
+      }
+    })()
+
+    return () => { active = false }
   }, [])
 
   async function submit(event: FormEvent<HTMLFormElement>, action: (data: FormData) => Promise<void>) {
@@ -84,11 +94,12 @@ export default function UserAdministration() {
             password_confirmation: value(data, 'password_confirmation'),
           })
         })}>
-          <label className="auth-label">Full name<input className="auth-input" name="name" required maxLength={255} /></label>
-          <label className="auth-label">Email<input className="auth-input" name="email" type="email" required maxLength={255} /></label>
-          <label className="auth-label">Temporary password<input className="auth-input" name="password" type="password" minLength={12} required autoComplete="new-password" /></label>
-          <label className="auth-label">Confirm temporary password<input className="auth-input" name="password_confirmation" type="password" minLength={12} required autoComplete="new-password" /></label>
-          <button className="button button-primary" disabled={busy}>Create account</button>
+          <label className="auth-label">Full name<input className="auth-input" name="name" required maxLength={255} autoComplete="off" /></label>
+          <label className="auth-label">Email<input className="auth-input" name="email" type="email" required maxLength={255} autoComplete="off" spellCheck={false} /></label>
+          <label className="auth-label">Temporary password<input className="auth-input" name="password" type="password" minLength={12} required autoComplete="new-password" aria-describedby="create-user-password-help" /></label>
+          <label className="auth-label">Confirm temporary password<input className="auth-input" name="password_confirmation" type="password" minLength={12} required autoComplete="new-password" aria-describedby="create-user-password-help" /></label>
+          <p className="form-hint" id="create-user-password-help">{'At least 12 characters. The account must replace it at first sign-in.'}</p>
+          <button className="button button-primary" disabled={busy}>{busy ? 'Creating…' : 'Create account'}</button>
         </form>
       </section>
 
@@ -122,10 +133,10 @@ export default function UserAdministration() {
             })
           })}>
             <label className="auth-label">Role<select className="auth-input" name="role_id" required defaultValue=""><option value="" disabled>Select a role</option>{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label>
-            <label className="auth-label">Work scope<input className="auth-input" name="work_scope" required maxLength={255} placeholder="Describe the assigned work area" /></label>
+            <label className="auth-label">Work scope<input className="auth-input" name="work_scope" required maxLength={255} placeholder="Describe the assigned work area" autoComplete="off" /></label>
             <label className="auth-label">Organizational unit (optional)<select className="auth-input" name="organizational_unit_id" defaultValue=""><option value="">No unit selected</option>{organizationalUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name} · {unit.unit_type}</option>)}</select></label>
-            <label className="auth-label">Starts<input className="auth-input" name="valid_from" type="date" required defaultValue={today} /></label>
-            <label className="auth-label">Ends (optional)<input className="auth-input" name="valid_until" type="date" /></label>
+            <label className="auth-label">Starts<input className="auth-input" name="valid_from" type="date" required defaultValue={today} autoComplete="off" /></label>
+            <label className="auth-label">Ends (optional)<input className="auth-input" name="valid_until" type="date" autoComplete="off" /></label>
             <button className="button button-secondary" disabled={busy || roles.length === 0}>Assign role</button>
           </form>
           <div className="assignment-list">{user.role_assignments.map((assignment) => <div className="config-row" key={assignment.id}>
@@ -142,10 +153,11 @@ export default function UserAdministration() {
               password: value(data, 'password'), password_confirmation: value(data, 'password_confirmation'), reason: value(data, 'reason'),
             })
           })}>
-            <label className="auth-label">Temporary password<input className="auth-input" name="password" type="password" minLength={12} required autoComplete="new-password" /></label>
-            <label className="auth-label">Confirm password<input className="auth-input" name="password_confirmation" type="password" minLength={12} required autoComplete="new-password" /></label>
-            <label className="auth-label">Reset reason<input className="auth-input" name="reason" required maxLength={1000} /></label>
-            <button className="config-edit" disabled={busy}>Reset password</button>
+            <label className="auth-label">Temporary password<input className="auth-input" name="password" type="password" minLength={12} required autoComplete="new-password" aria-describedby={`reset-${user.id}-password-help`} /></label>
+            <label className="auth-label">Confirm password<input className="auth-input" name="password_confirmation" type="password" minLength={12} required autoComplete="new-password" aria-describedby={`reset-${user.id}-password-help`} /></label>
+            <label className="auth-label">Reset reason<input className="auth-input" name="reason" required maxLength={1000} autoComplete="off" /></label>
+            <p className="form-hint" id={`reset-${user.id}-password-help`}>{'At least 12 characters. The user must replace it at next sign-in.'}</p>
+            <button className="config-edit" disabled={busy}>{busy ? 'Resetting…' : 'Reset password'}</button>
           </form>
         </>}
       </article>)}
