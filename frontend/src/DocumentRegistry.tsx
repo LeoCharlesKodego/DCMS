@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { authRequest, authUpload, uploadLimitLabel } from './api'
+import { ApiError, authRequest, authUpload, firstFieldErrors, uploadLimitLabel } from './api'
 
 type DocumentRow = {
   id: number; title: string; document_type: string | null; category: string | null
@@ -33,10 +33,27 @@ export default function DocumentRegistry() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
-  const [titleError, setTitleError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [accessDenied, setAccessDenied] = useState(false)
   const [decisionError, setDecisionError] = useState<{ taskId: number; message: string } | null>(null)
   const [titleSizePt, setTitleSizePt] = useState<number | null>(null)
   const [titleSettingHistory, setTitleSettingHistory] = useState<{ old_value: string | null; new_value: string; changed_by: string; changed_at: string }[]>([])
+
+  function clearFieldError(name: string) {
+    setFieldErrors((current) => {
+      if (!current[name]) return current
+      const next = { ...current }
+      delete next[name]
+      return next
+    })
+  }
+
+  function fieldErrorProps(name: string) {
+    return {
+      'aria-invalid': fieldErrors[name] ? true : undefined,
+      'aria-describedby': fieldErrors[name] ? `register-${name}-error` : undefined,
+    } as const
+  }
 
   async function refresh() {
     const result = await authRequest('/documents') as RegistryData
@@ -66,7 +83,10 @@ export default function DocumentRegistry() {
       try {
         await refresh()
       } catch (reason) {
-        if (active) setError(reason instanceof Error ? reason.message : 'Could not load documents.')
+        if (!active) return
+        // A 403 is a scope decision, not a failure: state it plainly.
+        if (reason instanceof ApiError && reason.status === 403) setAccessDenied(true)
+        else setError(reason instanceof Error ? reason.message : 'Could not load documents.')
       }
     })()
 
@@ -76,7 +96,7 @@ export default function DocumentRegistry() {
   const scopedCodes = useMemo(() => codes?.section_units.filter((item) => item.parent_service_id === Number(serviceId)) ?? [], [codes, serviceId])
 
   async function createDocument(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setBusy(true); setError(''); setNotice(''); setTitleError('')
+    event.preventDefault(); setBusy(true); setError(''); setNotice(''); setFieldErrors({})
     const formElement = event.currentTarget
     const form = new FormData(formElement)
     try {
@@ -89,10 +109,11 @@ export default function DocumentRegistry() {
       })
       formElement.reset(); await refresh(); setNotice('Document request added to the register, awaiting code assignment.')
     } catch (reason) {
-      const message = reason instanceof Error ? reason.message : 'Could not create the document request.'
-      // The server rejects a blank or whitespace-only title; report it on the field.
-      if (/title/i.test(message)) setTitleError(message)
-      else setError(message)
+      // Server validation messages are keyed by field, so each one is shown under
+      // the control it belongs to instead of only in the panel message.
+      const errors = firstFieldErrors(reason)
+      if (Object.keys(errors).length > 0) setFieldErrors(errors)
+      else setError(reason instanceof Error ? reason.message : 'Could not create the document request.')
     }
     finally { setBusy(false) }
   }
@@ -223,10 +244,12 @@ export default function DocumentRegistry() {
   }
 
   const [expandedId, setExpandedId] = useState<number | null>(null)
+  if (accessDenied) return <section className="panel registry-panel"><h2>Document registry</h2><p className="registry-empty">You don’t have access to the document registry.</p></section>
   if (!registry && !error) return <section className="panel registry-panel"><p>Loading document register…</p></section>
 
   function renderDetails(document: DocumentRow) {
-    const canUpload = registry!.create_units.some((unit) => unit.id === document.owning_unit_id)
+    const canEditUnit = registry!.create_units.some((unit) => unit.id === document.owning_unit_id)
+    const canUpload = canEditUnit
       && (document.versions.length === 0 || document.versions[document.versions.length - 1]?.status === 'released')
 
     return <div className="registry-detail">
@@ -250,7 +273,7 @@ export default function DocumentRegistry() {
         {!!version.workflow_tasks.length && <div className="lifecycle-actions"><h4>My workflow tasks</h4>{version.workflow_tasks.map((task) => <form key={task.id} onSubmit={(event) => workflowDecision(event, document, version, task.id)}><strong>{task.stage_name}</strong><small>{task.action_type.replaceAll('_', ' ')} · {task.role}{task.organizational_unit ? ` · ${task.organizational_unit}` : ' · Institution scope'}</small><textarea name="comment" rows={2} maxLength={4000} placeholder="Reason required for return or resolving findings" aria-invalid={decisionError?.taskId === task.id ? true : undefined} aria-describedby={decisionError?.taskId === task.id ? `task-${task.id}-help task-${task.id}-error` : `task-${task.id}-help`} /><p className="form-hint" id={`task-${task.id}-help`}>{'A reason is required to return a document or to resolve submission warnings.'}</p>{decisionError?.taskId === task.id && <p className="field-error" id={`task-${task.id}-error`} role="alert">{decisionError.message}</p>}<div>{task.decisions.filter((decision) => decision !== 'returned_for_revision').map((decision) => <button key={decision} className="button button-secondary" type="submit" name="decision_type" value={decision} disabled={busy}>{decision.replaceAll('_', ' ')}</button>)}<button className="button button-secondary" type="submit" name="decision_type" value="returned_for_revision" disabled={busy}>Return for revision</button></div></form>)}</div>}
 
         {version.files.map((file) => <a key={file.id} href={`/api/document-files/${file.id}/download`}>{file.original_filename}<small>{(file.byte_size / 1048576).toFixed(2)} MiB · SHA-256 {file.sha256}</small></a>)}
-        {canUpload && (version.status === 'draft' || version.status === 'returned_for_revision') && <details className="version-upload"><summary>Replace current files and rerun checks</summary><form onSubmit={(event) => replaceFiles(event, document, version)} encType="multipart/form-data"><label>Corrected files (PDF, DOCX, XLSX, JPEG, PNG; up to {uploadLimitLabel} each)<input type="file" name="files[]" multiple required accept=".pdf,.docx,.xlsx,.jpg,.jpeg,.png" /></label><button className="button button-primary" disabled={busy}>Replace current file set</button></form></details>}
+        {canEditUnit && (version.status === 'draft' || version.status === 'returned_for_revision') && <details className="version-upload"><summary>Replace current files and rerun checks</summary><form onSubmit={(event) => replaceFiles(event, document, version)} encType="multipart/form-data"><label>Corrected files (PDF, DOCX, XLSX, JPEG, PNG; up to {uploadLimitLabel} each)<input type="file" name="files[]" multiple required accept=".pdf,.docx,.xlsx,.jpg,.jpeg,.png" /></label><button className="button button-primary" disabled={busy}>Replace current file set</button></form></details>}
         {!!version.available_actions.length && <div className="lifecycle-actions">{version.available_actions.map((action) => <form key={action} onSubmit={(event) => lifecycleAction(event, document, version)}><input type="hidden" name="action" value={action} />{action === 'return_for_revision' && <><textarea name="reason" rows={2} required placeholder="Reason for return" aria-describedby={`lifecycle-${version.id}-${action}-help`} /><p className="form-hint" id={`lifecycle-${version.id}-${action}-help`}>{'The reason is recorded against this version.'}</p></>}{(action === 'propose_effective_date' || action === 'confirm_effective_date') && <label>{action === 'propose_effective_date' ? 'Proposed effective date' : 'Confirm proposed effective date'}<input name="effective_date" type="date" required defaultValue={action === 'confirm_effective_date' ? version.proposed_effective_date ?? '' : ''} /></label>}<button className="button button-secondary" disabled={busy}>{busy ? 'Recording…' : action.replaceAll('_', ' ')}</button></form>)}</div>}
       </article>)}
 
@@ -278,14 +301,14 @@ export default function DocumentRegistry() {
 
     {!!registry?.create_units.length && <form className="panel registry-create" onSubmit={createDocument}>
       <div className="panel-heading"><div><h2>Register a document</h2><p>Requests begin at revision 1.0 and await official code assignment.</p></div></div>
-      <label>Document title<input name="title" required maxLength={500} autoComplete="off" aria-invalid={titleError ? true : undefined} aria-describedby={titleError ? 'register-title-error' : undefined} onChange={() => { if (titleError) setTitleError('') }} />{titleError && <p className="field-error" id="register-title-error" role="alert">{titleError}</p>}</label>
+      <label>Document title<input name="title" required maxLength={500} autoComplete="off" {...fieldErrorProps('title')} onChange={() => clearFieldError('title')} />{fieldError(fieldErrors, 'title')}</label>
       <div className="registry-form-grid">
-        <label>Document type<select name="document_type_id" required defaultValue=""><option value="" disabled>Select type</option>{registry.document_types.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-        <label>Category<select name="category_id" defaultValue=""><option value="">No category</option>{registry.categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-        <label>Owning unit<select name="owning_unit_id" required defaultValue=""><option value="" disabled>Select unit</option>{registry.create_units.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-        <label>Retention period (years)<input name="retention_years" type="number" min="0" max="65535" inputMode="numeric" autoComplete="off" /></label>
+        <label>Document type<select name="document_type_id" required defaultValue="" {...fieldErrorProps('document_type_id')} onChange={() => clearFieldError('document_type_id')}><option value="" disabled>Select type</option>{registry.document_types.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>{fieldError(fieldErrors, 'document_type_id')}</label>
+        <label>Category<select name="category_id" defaultValue="" {...fieldErrorProps('category_id')} onChange={() => clearFieldError('category_id')}><option value="">No category</option>{registry.categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>{fieldError(fieldErrors, 'category_id')}</label>
+        <label>Owning unit<select name="owning_unit_id" required defaultValue="" {...fieldErrorProps('owning_unit_id')} onChange={() => clearFieldError('owning_unit_id')}><option value="" disabled>Select unit</option>{registry.create_units.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>{fieldError(fieldErrors, 'owning_unit_id')}</label>
+        <label>Retention period (years)<input name="retention_years" type="number" min="0" max="65535" inputMode="numeric" autoComplete="off" {...fieldErrorProps('retention_years')} onChange={() => clearFieldError('retention_years')} />{fieldError(fieldErrors, 'retention_years')}</label>
       </div>
-      <label>Remarks<textarea name="remarks" rows={2} maxLength={4000} autoComplete="off" /></label>
+      <label>Remarks<textarea name="remarks" rows={2} maxLength={4000} autoComplete="off" {...fieldErrorProps('remarks')} onChange={() => clearFieldError('remarks')} />{fieldError(fieldErrors, 'remarks')}</label>
       <button className="button button-primary" disabled={busy}>{busy ? 'Adding…' : 'Add to register'}</button>
     </form>}
 
@@ -330,6 +353,13 @@ export default function DocumentRegistry() {
       <div className="registry-table-wrap"><table className="registry-table"><thead><tr><th>Base code</th><th>Components</th><th>Document</th><th>Requested</th><th>Assigned by / date</th></tr></thead><tbody>{masterEntries.map((entry) => <tr key={entry.id}><td><strong>{entry.base_code}</strong><small>Rev {entry.document.current_revision_label}</small></td><td>{[entry.service_component, entry.section_component, entry.unit_component, entry.document_type_component].filter(Boolean).map((item) => item!.code).join(' / ')}</td><td>{entry.document.title}<small>{entry.document.owning_unit.name}</small></td><td>{new Date(entry.requested_at).toLocaleDateString()}</td><td>{entry.assigned_by.name}<small>{new Date(entry.assigned_at).toLocaleDateString()}</small></td></tr>)}</tbody></table></div>
     </section>}
   </div>
+}
+
+function fieldError(errors: Record<string, string>, name: string) {
+  const message = errors[name]
+  if (!message) return null
+
+  return <p className="field-error" id={`register-${name}-error`} role="alert">{message}</p>
 }
 
 function readableStatus(value: string) {
