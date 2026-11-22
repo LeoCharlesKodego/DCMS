@@ -462,6 +462,7 @@ h1 em { color: var(--seal); font-weight: 500; }
 .registry-table td { color: var(--ink); font-size: var(--text-sm); }
 .registry-table td small, .registry-table tbody th small { display: block; margin-top: var(--space-1); color: var(--ink-muted); font-size: var(--text-xs); font-weight: 400; }
 .registry-table .is-date { text-align: end; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.registry-table .is-numeric { text-align: end; font-variant-numeric: tabular-nums; }
 .registry-code strong { display: block; font-variant-numeric: tabular-nums; }
 .registry-row-actions { text-align: end; white-space: nowrap; }
 .registry-row-actions .button { min-height: var(--space-8); padding: 0 var(--space-2); font-size: var(--text-xs); }
@@ -499,6 +500,33 @@ h1 em { color: var(--seal); font-weight: 500; }
 .records-actions { display: grid; gap: var(--space-2); justify-items: end; }
 .records-actions form { display: flex; flex-wrap: wrap; gap: var(--space-1); align-items: center; justify-content: flex-end; }
 .records-actions input { min-inline-size: 12rem; max-inline-size: 15rem; padding: var(--space-1) var(--space-2); border: var(--hairline) solid var(--rule); border-radius: var(--radius-md); font: inherit; font-size: var(--text-sm); }
+.external-references-wrap { scroll-padding-block-start: var(--topbar-height); scroll-margin-block-start: var(--topbar-height); }
+.external-references-table th[scope="row"] { min-inline-size: 15rem; }
+.external-references-table td { vertical-align: top; }
+.external-reference-links { margin: 0; padding-inline-start: var(--space-4); color: var(--ink-muted); font-size: var(--text-xs); }
+.external-reference-links li + li { margin-block-start: var(--space-1); }
+.external-reference-notes { display: block; color: var(--ink-muted); font-size: var(--text-xs); margin-block-start: var(--space-1); }
+.external-reference-link-form { display: flex; flex-wrap: wrap; gap: var(--space-1); align-items: center; justify-content: flex-end; }
+.external-reference-link-form input { min-inline-size: 8rem; max-inline-size: 10rem; padding: var(--space-1) var(--space-2); border: var(--hairline) solid var(--rule); border-radius: var(--radius-md); font: inherit; font-size: var(--text-sm); }
+.migration-reconciliation-wrap { scroll-padding-block-start: var(--topbar-height); scroll-margin-block-start: var(--topbar-height); }
+.migration-items { display: grid; gap: var(--space-3); }
+.migration-item { display: grid; gap: var(--space-2); }
+.migration-item-heading { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; justify-content: space-between; }
+.migration-filename { word-break: break-word; overflow-wrap: anywhere; min-inline-size: 0; }
+.migration-meta { color: var(--ink-muted); font-size: var(--text-xs); word-break: break-word; overflow-wrap: anywhere; }
+.migration-hash { font-family: var(--font-mono, monospace); font-size: var(--text-xs); word-break: break-all; overflow-wrap: anywhere; white-space: normal; }
+.migration-upload { display: grid; gap: var(--space-2); }
+@media (max-width: 1024px) { .migration-item { min-inline-size: 0; } .registry-form-grid { grid-template-columns: 1fr; } }
+
+.reports-summary-wrap, .reports-audit-wrap { scroll-padding-block-start: var(--topbar-height); scroll-margin-block-start: var(--topbar-height); }
+.reports-summary-table th[scope="row"] { min-inline-size: 12rem; }
+.reports-audit-table th[scope="row"] { min-inline-size: 12rem; }
+.reports-audit-table td { vertical-align: top; }
+.reports-audit-table small { display: block; color: var(--ink-muted); font-size: var(--text-xs); margin-block-start: var(--space-1); }
+.reports-filters { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: end; }
+.reports-filters label { display: grid; gap: var(--space-1); font-size: var(--text-sm); }
+.reports-filters select, .reports-filters input { padding: var(--space-1) var(--space-2); border: var(--hairline) solid var(--rule); border-radius: var(--radius-md); font: inherit; font-size: var(--text-sm); }
+.reports-filter-actions { display: flex; gap: var(--space-2); align-items: center; }
 .code-assignment { min-width: 15rem; margin-top: var(--space-2); }
 .code-assignment summary { cursor: pointer; color: var(--seal); font-weight: 600; }
 .code-assignment form { display: grid; gap: var(--space-2); padding-top: var(--space-3); }
