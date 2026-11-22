@@ -33,6 +33,7 @@ export default function DocumentRegistry() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
+  const [decisionError, setDecisionError] = useState<{ taskId: number; message: string } | null>(null)
   const [titleSizePt, setTitleSizePt] = useState<number | null>(null)
   const [titleSettingHistory, setTitleSettingHistory] = useState<{ old_value: string | null; new_value: string; changed_by: string; changed_at: string }[]>([])
 
@@ -59,7 +60,16 @@ export default function DocumentRegistry() {
   }
 
   useEffect(() => {
-    refresh().catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not load documents.'))
+    let active = true
+    void (async () => {
+      try {
+        await refresh()
+      } catch (reason) {
+        if (active) setError(reason instanceof Error ? reason.message : 'Could not load documents.')
+      }
+    })()
+
+    return () => { active = false }
   }, [])
 
   const scopedCodes = useMemo(() => codes?.section_units.filter((item) => item.parent_service_id === Number(serviceId)) ?? [], [codes, serviceId])
@@ -154,8 +164,10 @@ export default function DocumentRegistry() {
     const form = new FormData(event.currentTarget)
     const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null
     const decisionType = submitter?.value ?? ''
+    setDecisionError(null)
     const comment = String(form.get('comment') ?? '').trim()
     if (decisionType === 'returned_for_revision' && !comment) {
+      setDecisionError({ taskId, message: 'A return reason is required.' })
       setError('A return reason is required.')
       setBusy(false)
       return
@@ -225,22 +237,22 @@ export default function DocumentRegistry() {
         {version.change_summary && <p>{version.change_summary}</p>}
         {version.lifecycle_note && <small className="lifecycle-note">{version.lifecycle_note}</small>}
 
-        {!!version.distributions.length && <div className="lifecycle-actions"><h4>Distribution history</h4>{version.distributions.map((distribution) => <article className="audit-event" key={distribution.id}><div><strong>Issued {distribution.issued_at ? new Date(distribution.issued_at).toLocaleString() : ''}</strong><small>By {distribution.issued_by ?? 'KMT'}{distribution.targets.length ? ` · ${distribution.targets.join(', ')}` : ''}</small>{distribution.recipients.map((recipient) => <div key={recipient.id}><span>{recipient.name}: {readableStatus(recipient.status)}</span>{recipient.due_at && <small> · due {recipient.due_at}</small>}{recipient.acknowledged_at && <small> · acknowledged {new Date(recipient.acknowledged_at).toLocaleString()}</small>}{recipient.can_acknowledge && <button className="button button-secondary" type="button" disabled={busy} onClick={() => acknowledgeDistribution(recipient.id, document, version)}>Acknowledge receipt</button>}{recipient.can_exempt && <form onSubmit={(event) => exemptDistribution(event, recipient.id, document, version)}><label>Exemption reason<textarea name="reason" rows={2} required maxLength={4000} /></label><button className="button button-secondary" disabled={busy}>Exempt this recipient</button></form>}</div>)}</div></article>)}</div>}
+        {!!version.distributions.length && <div className="lifecycle-actions"><h4>Distribution history</h4>{version.distributions.map((distribution) => <article className="audit-event" key={distribution.id}><div><strong>Issued {distribution.issued_at ? new Date(distribution.issued_at).toLocaleString() : ''}</strong><small>By {distribution.issued_by ?? 'KMT'}{distribution.targets.length ? ` · ${distribution.targets.join(', ')}` : ''}</small>{distribution.recipients.map((recipient) => <div key={recipient.id}><span>{recipient.name}: {readableStatus(recipient.status)}</span>{recipient.due_at && <small> · due {recipient.due_at}</small>}{recipient.acknowledged_at && <small> · acknowledged {new Date(recipient.acknowledged_at).toLocaleString()}</small>}{recipient.can_acknowledge && <button className="button button-secondary" type="button" disabled={busy} onClick={() => acknowledgeDistribution(recipient.id, document, version)}>{busy ? 'Acknowledging…' : 'Acknowledge receipt'}</button>}{recipient.can_exempt && <form onSubmit={(event) => exemptDistribution(event, recipient.id, document, version)}><label>Exemption reason<textarea name="reason" rows={2} required maxLength={4000} aria-describedby={`exempt-${recipient.id}-help`} /></label><p className="form-hint" id={`exempt-${recipient.id}-help`}>{'The reason is recorded in the distribution history.'}</p><button className="button button-secondary" disabled={busy}>{busy ? 'Exempting…' : 'Exempt this recipient'}</button></form>}</div>)}</div></article>)}</div>}
 
-        {registry!.can_distribute && version.status === 'released' && <div className="lifecycle-actions"><button className="button button-secondary" type="button" disabled={busy} onClick={loadDistributionTargets}>Prepare distribution</button>{distributionTargets && <form onSubmit={(event) => issueDistribution(event, document, version)}><label>Targets<select name="targets" required multiple size={5}>{distributionTargets.map((target) => <option key={`${target.target_type}:${target.id}`} value={`${target.target_type}:${target.id}`}>{target.target_type.replaceAll('_', ' ')} · {target.label}</option>)}</select></label><label><input type="checkbox" name="acknowledgment_required" defaultChecked /> Require recipient acknowledgment</label><label>Optional acknowledgment due date<input name="due_at" type="date" /></label><button className="button button-primary" disabled={busy}>Issue exact-version distribution</button></form>}</div>}
+        {registry!.can_distribute && version.status === 'released' && <div className="lifecycle-actions"><button className="button button-secondary" type="button" disabled={busy} onClick={loadDistributionTargets}>Prepare distribution</button>{distributionTargets && <form onSubmit={(event) => issueDistribution(event, document, version)}><label>Targets<select name="targets" required multiple size={5} aria-describedby={`distribution-${version.id}-help`}>{distributionTargets.map((target) => <option key={`${target.target_type}:${target.id}`} value={`${target.target_type}:${target.id}`}>{target.target_type.replaceAll('_', ' ')} · {target.label}</option>)}</select></label><p className="form-hint" id={`distribution-${version.id}-help`}>{'Choose one or more units, roles, or individual recipients.'}</p><label><input type="checkbox" name="acknowledgment_required" defaultChecked /> Require recipient acknowledgment</label><label>Optional acknowledgment due date<input name="due_at" type="date" autoComplete="off" /></label><button className="button button-primary" disabled={busy}>{busy ? 'Issuing…' : 'Issue exact-version distribution'}</button></form>}</div>}
 
-        {!!version.workflow_tasks.length && <div className="lifecycle-actions"><h4>My workflow tasks</h4>{version.workflow_tasks.map((task) => <form key={task.id} onSubmit={(event) => workflowDecision(event, document, version, task.id)}><strong>{task.stage_name}</strong><small>{task.action_type.replaceAll('_', ' ')} · {task.role}{task.organizational_unit ? ` · ${task.organizational_unit}` : ' · Institution scope'}</small><textarea name="comment" rows={2} maxLength={4000} placeholder="Reason required for return or resolving findings" /><div>{task.decisions.filter((decision) => decision !== 'returned_for_revision').map((decision) => <button key={decision} className="button button-secondary" type="submit" name="decision_type" value={decision} disabled={busy}>{decision.replaceAll('_', ' ')}</button>)}<button className="button button-secondary" type="submit" name="decision_type" value="returned_for_revision" disabled={busy}>Return for revision</button></div></form>)}</div>}
+        {!!version.workflow_tasks.length && <div className="lifecycle-actions"><h4>My workflow tasks</h4>{version.workflow_tasks.map((task) => <form key={task.id} onSubmit={(event) => workflowDecision(event, document, version, task.id)}><strong>{task.stage_name}</strong><small>{task.action_type.replaceAll('_', ' ')} · {task.role}{task.organizational_unit ? ` · ${task.organizational_unit}` : ' · Institution scope'}</small><textarea name="comment" rows={2} maxLength={4000} placeholder="Reason required for return or resolving findings" aria-invalid={decisionError?.taskId === task.id ? true : undefined} aria-describedby={decisionError?.taskId === task.id ? `task-${task.id}-help task-${task.id}-error` : `task-${task.id}-help`} /><p className="form-hint" id={`task-${task.id}-help`}>{'A reason is required to return a document or to resolve submission warnings.'}</p>{decisionError?.taskId === task.id && <p className="field-error" id={`task-${task.id}-error`} role="alert">{decisionError.message}</p>}<div>{task.decisions.filter((decision) => decision !== 'returned_for_revision').map((decision) => <button key={decision} className="button button-secondary" type="submit" name="decision_type" value={decision} disabled={busy}>{decision.replaceAll('_', ' ')}</button>)}<button className="button button-secondary" type="submit" name="decision_type" value="returned_for_revision" disabled={busy}>Return for revision</button></div></form>)}</div>}
 
         {version.files.map((file) => <a key={file.id} href={`/api/document-files/${file.id}/download`}>{file.original_filename}<small>{(file.byte_size / 1048576).toFixed(2)} MiB · SHA-256 {file.sha256}</small></a>)}
         {canUpload && (version.status === 'draft' || version.status === 'returned_for_revision') && <details className="version-upload"><summary>Replace current files and rerun checks</summary><form onSubmit={(event) => replaceFiles(event, document, version)} encType="multipart/form-data"><label>Corrected files (PDF, DOCX, XLSX, JPEG, PNG; up to {uploadLimitLabel} each)<input type="file" name="files[]" multiple required accept=".pdf,.docx,.xlsx,.jpg,.jpeg,.png" /></label><button className="button button-primary" disabled={busy}>Replace current file set</button></form></details>}
-        {!!version.available_actions.length && <div className="lifecycle-actions">{version.available_actions.map((action) => <form key={action} onSubmit={(event) => lifecycleAction(event, document, version)}><input type="hidden" name="action" value={action} />{action === 'return_for_revision' && <textarea name="reason" rows={2} required placeholder="Reason for return" />}{(action === 'propose_effective_date' || action === 'confirm_effective_date') && <label>{action === 'propose_effective_date' ? 'Proposed effective date' : 'Confirm proposed effective date'}<input name="effective_date" type="date" required defaultValue={action === 'confirm_effective_date' ? version.proposed_effective_date ?? '' : ''} /></label>}<button className="button button-secondary" disabled={busy}>{action.replaceAll('_', ' ')}</button></form>)}</div>}
+        {!!version.available_actions.length && <div className="lifecycle-actions">{version.available_actions.map((action) => <form key={action} onSubmit={(event) => lifecycleAction(event, document, version)}><input type="hidden" name="action" value={action} />{action === 'return_for_revision' && <><textarea name="reason" rows={2} required placeholder="Reason for return" aria-describedby={`lifecycle-${version.id}-${action}-help`} /><p className="form-hint" id={`lifecycle-${version.id}-${action}-help`}>{'The reason is recorded against this version.'}</p></>}{(action === 'propose_effective_date' || action === 'confirm_effective_date') && <label>{action === 'propose_effective_date' ? 'Proposed effective date' : 'Confirm proposed effective date'}<input name="effective_date" type="date" required defaultValue={action === 'confirm_effective_date' ? version.proposed_effective_date ?? '' : ''} /></label>}<button className="button button-secondary" disabled={busy}>{busy ? 'Recording…' : action.replaceAll('_', ' ')}</button></form>)}</div>}
       </article>)}
 
       <div className="registry-detail-forms">
         {canUpload && <details className="version-upload"><summary>{document.versions.length ? 'Upload revision' : 'Upload first draft'}</summary><form onSubmit={(event) => uploadVersion(event, document)} encType="multipart/form-data">
           {document.versions.length > 0 && <><label>Revision type<select name="revision_kind" required defaultValue=""><option value="" disabled>Select revision type</option><option value="minor">Minor (+0.1)</option><option value="major">Major (next .0)</option></select></label><label>Change summary<textarea name="change_summary" rows={2} required maxLength={4000} /></label></>}
           <label>Files (PDF, DOCX, XLSX, JPEG, PNG; up to {uploadLimitLabel} each)<input type="file" name="files[]" multiple required accept=".pdf,.docx,.xlsx,.jpg,.jpeg,.png" /></label>
-          <button className="button button-primary" disabled={busy}>Save draft version</button>
+          <button className="button button-primary" disabled={busy}>{busy ? 'Saving draft…' : 'Save draft version'}</button>
         </form></details>}
 
         {registry!.can_assign_code && document.status === 'pending_code' && codes && <details className="code-assignment"><summary>Assign official code</summary><form onSubmit={(event) => assignCode(event, document.id)}>
@@ -248,7 +260,7 @@ export default function DocumentRegistry() {
           <label>Section<select name="section_component_id" required defaultValue=""><option value="">Select section</option>{scopedCodes.map((item) => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select></label>
           <label>Unit (optional)<select name="unit_component_id" defaultValue=""><option value="">None</option>{scopedCodes.map((item) => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select></label>
           <label>Code document type<select name="document_type_component_id" required defaultValue=""><option value="">Select official type</option>{codes.document_types.map((item) => <option key={item.id} value={item.id}>{item.code} — {item.name}</option>)}</select></label>
-          <button className="button button-primary" disabled={busy}>Assign code</button>
+          <button className="button button-primary" disabled={busy}>{busy ? 'Assigning code…' : 'Assign code'}</button>
         </form></details>}
       </div>
     </div>
@@ -260,15 +272,15 @@ export default function DocumentRegistry() {
 
     {!!registry?.create_units.length && <form className="panel registry-create" onSubmit={createDocument}>
       <div className="panel-heading"><div><h2>Register a document</h2><p>Requests begin at revision 1.0 and await official code assignment.</p></div></div>
-      <label>Document title<input name="title" required maxLength={500} /></label>
+      <label>Document title<input name="title" required maxLength={500} autoComplete="off" /></label>
       <div className="registry-form-grid">
         <label>Document type<select name="document_type_id" required defaultValue=""><option value="" disabled>Select type</option>{registry.document_types.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <label>Category<select name="category_id" defaultValue=""><option value="">No category</option>{registry.categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <label>Owning unit<select name="owning_unit_id" required defaultValue=""><option value="" disabled>Select unit</option>{registry.create_units.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-        <label>Retention period (years)<input name="retention_years" type="number" min="0" max="65535" /></label>
+        <label>Retention period (years)<input name="retention_years" type="number" min="0" max="65535" inputMode="numeric" autoComplete="off" /></label>
       </div>
-      <label>Remarks<textarea name="remarks" rows={2} maxLength={4000} /></label>
-      <button className="button button-primary" disabled={busy}>Add to register</button>
+      <label>Remarks<textarea name="remarks" rows={2} maxLength={4000} autoComplete="off" /></label>
+      <button className="button button-primary" disabled={busy}>{busy ? 'Adding…' : 'Add to register'}</button>
     </form>}
 
     <section className="panel registry-panel">
@@ -278,7 +290,7 @@ export default function DocumentRegistry() {
           {registry?.can_assign_code && <button className="button button-secondary" type="button" onClick={loadCodeLists}>Load official code lists</button>}
         </div>
       </div>
-      {registry?.can_assign_code && titleSizePt !== null && <form className="lifecycle-actions" onSubmit={(event) => void saveTitleSize(event)}><label>KMT title-size default (pt)<input type="number" min="1" value={titleSizePt} onChange={(event) => setTitleSizePt(Number(event.target.value))} required /></label><button className="button button-secondary" disabled={busy}>Save setting</button><details><summary>Setting version history</summary><ul>{titleSettingHistory.map((entry, index) => <li key={`${entry.changed_at}-${index}`}>{entry.old_value ?? 'unset'} → {entry.new_value} pt · {entry.changed_by} · {new Date(entry.changed_at).toLocaleString()}</li>)}</ul></details></form>}
+      {registry?.can_assign_code && titleSizePt !== null && <form className="lifecycle-actions" onSubmit={(event) => void saveTitleSize(event)}><label>KMT title-size default (pt)<input type="number" min="1" max="200" inputMode="numeric" value={titleSizePt} onChange={(event) => setTitleSizePt(Number(event.target.value))} required /></label><button className="button button-secondary" disabled={busy}>{busy ? 'Saving…' : 'Save setting'}</button><details><summary>Setting version history</summary><ul>{titleSettingHistory.map((entry, index) => <li key={`${entry.changed_at}-${index}`}>{entry.old_value ?? 'unset'} → {entry.new_value} pt · {entry.changed_by} · {new Date(entry.changed_at).toLocaleString()}</li>)}</ul></details></form>}
 
       {!registry?.data.length ? <div className="registry-empty">No documents recorded in your scope yet.</div> : <div className="registry-table-wrap" role="region" tabIndex={0} aria-labelledby="registry-table-caption">
         <table className="registry-table">
