@@ -140,7 +140,7 @@ export default function DocumentMigration() {
       <div className="panel-heading">
         <div><h2>Migration verification queue</h2><p>Managed by the KMT registration permission.</p></div>
         <label>Batch
-          <select value={selected ?? ''} onChange={(event) => { if (event.target.value) loadBatch(Number(event.target.value)).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not load batch.')) }}>
+          <select className="migration-batch-select" value={selected ?? ''} onChange={(event) => { if (event.target.value) loadBatch(Number(event.target.value)).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not load batch.')) }}>
             <option value="">Select batch</option>
             {(batches ?? []).map((item) => <option key={item.id} value={item.id}>{item.name} · {item.items_count} files · {item.status}</option>)}
           </select>
