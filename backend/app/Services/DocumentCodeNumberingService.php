@@ -38,7 +38,7 @@ class DocumentCodeNumberingService
             throw ValidationException::withMessages(['institution' => 'Set the institution short name before assigning document codes.']);
         }
 
-        return DB::transaction(function () use ($document, $assignedBy, $service, $section, $unit, $documentType, $institution): MasterCodeRegisterEntry {
+        return DB::transaction(function () use ($document, $assignedBy, $audit, $service, $section, $unit, $documentType, $institution): MasterCodeRegisterEntry {
             $prefixParts = [$institution->short_name, $service->code, $section->code];
             if ($unit) {
                 $prefixParts[] = $unit->code;

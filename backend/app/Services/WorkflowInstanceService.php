@@ -18,7 +18,7 @@ class WorkflowInstanceService
     /** @var array<string, list<string>> */
     private const ACTION_PERMISSIONS = [
         'verification' => ['document.submission.verify'],
-        'review' => ['document.review.verify', 'document.review.policy_specific_guideline_template'],
+        'review' => ['document.review.verify', 'document.review.policy_specific_guideline_template', 'document.review.division_head'],
         'approval' => ['document.master_copy.approve.manual_sop_guideline'],
         'release' => ['document.release.registered'],
     ];
