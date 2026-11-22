@@ -676,3 +676,46 @@ Ongoing log, updated screen by screen. Rule applied: keep labels, rules, errors,
 ### 10.8 Remaining screens
 
 Administration forms, workflow configuration, reports, and the remaining modules still carry template-style copy and will be audited as each is restyled. Per-view document titles (`<view> · ONP DCMS`) now update on navigation for every view.
+
+### 10.9 Development seed copy (Phase 3, step 2 follow-up)
+
+**Removed**
+
+- `test@example.com` from `DatabaseSeeder` in every environment except `local` and `testing`. Production seeding now creates no account with a published password; `ProductionSeedSafetyTest` asserts it.
+
+**Added, and why the wording is like this**
+
+- Fictional sample records, created only by `php artisan dcms:dev-sample-documents` (refuses production and any non-SQLite database) and never from `DatabaseSeeder`: `Sample — Awaiting official code`, `Sample — Draft procedure`, `Sample — Returned procedure`, `Sample — Released procedure`; units `Sample Operations Unit` and `Sample Records Unit`; accounts named `Sample Process Owner`, `Sample KMT`, and so on at `@example.test` addresses.
+- The `Sample —` prefix and the `Sample` display names are deliberate: any screenshot taken from a development database shows that the record is invented. The generated PDF body says `Fictional local sample procedure <CODE>` for the same reason.
+- Document codes keep the institutional pattern (`DEMO-TRN-OPS-PROC-012`) so the numbering, table, and copy behaviour under test are the real ones.
+
+**Kept**
+
+- The same lifecycle copy as production runs (statuses, workflow decisions, distribution states) — the sample data exercises the real services, so no test-only wording leaks into the interface.
+- `DatabaseSeeder`’s role, permission, and institution baseline in every environment.
+
+### 10.10 Forms across modules (Phase 3, step 3)
+
+**Added**
+
+- Field hints that state a rule rather than restating the label: `A reason is required to return a document or to resolve submission warnings.`, `The reason is recorded in the distribution history.`, `The reason is recorded against this version.`, `Choose one or more units, roles, or individual recipients.`, `At least 12 characters. The account must replace it at first sign-in.`, `At least 12 characters. The user must replace it at next sign-in.`, `A time zone name, for example Asia/Manila. It controls displayed timestamps.`
+- A field-level error under the workflow decision reason, connected with `aria-describedby` and `aria-invalid`, replacing the top-of-panel-only message for that validation. It keeps `role="alert"`.
+
+**Changed**
+
+- Every text, select, and textarea control in the registry, lifecycle, distribution, and workflow forms is 16px, so mobile browsers do not zoom on focus; the administration forms were already 16px.
+- `:user-invalid` on those controls now paints the danger border, and `:focus-visible` paints the 2px seal ring on top of it; no control relies on `outline: none`.
+- Submit buttons state what they are doing while disabled (`Assigning code…`, `Saving draft…`, `Issuing…`, `Exempting…`, `Acknowledging…`, `Recording…`, `Saving…`, `Creating…`, `Adding…`), and disabled buttons show a not-allowed cursor and reduced opacity. Double submission was already prevented by the `busy` flag; the label now says why the button is inert.
+- `autocomplete` is `off` on administrator-entered names, emails, codes, time zones, and reasons, and `new-password` on every temporary password. Names still carry no autofill semantics because an administrator is not entering their own details.
+- The category tree indentation uses `padding-inline-start` instead of `padding-left`.
+- Below 1100px the register drops its 640px minimum width, reserves no scrollbar gutter, and gives the action column the space it needs, so at 1024px the code, title, status, and actions all fit inside the register scroller on Chromium, Firefox, and WebKit.
+
+**Kept**
+
+- Every existing label, required marker, and server error message; the guides ask for correct wiring, not new wording.
+- `aria-label`s on the repeated per-recipient and per-stage controls, which already distinguish otherwise identical buttons.
+
+**Reported, not changed**
+
+- `Replace current files` is unreachable from the detail row: it requires `canUpload` (only when the latest version is released or absent) and a version in `draft`/`returned_for_revision`, and those conditions never hold together. The form is left in place and reported rather than silently deleted; fixing it is a product decision.
+- The sticky top bar can cover a control at the top of the register’s internal scroller. Tests drive those controls with the keyboard, which works, but a pointer user scrolling a long detail row can still meet the overlap.
