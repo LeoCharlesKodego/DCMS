@@ -24,7 +24,27 @@ type CodeData = { services: Option[]; section_units: Option[]; document_types: O
 type DistributionTargetOption = { target_type: 'organizational_unit' | 'role' | 'user'; id: number; label: string }
 type MasterEntry = { id: number; base_code: string; sequence_number: number; requested_at: string; assigned_at: string; document: { title: string; current_revision_label: string; owning_unit: { name: string } }; service_component: Option; section_component: Option; unit_component: Option | null; document_type_component: Option; assigned_by: { name: string } }
 
-export default function DocumentRegistry() {
+export type RegistryView = 'registry' | 'workflows'
+
+const VIEW_COPY: Record<RegistryView, { loading: string; heading: string; description: string; empty: string; caption: string }> = {
+  registry: {
+    loading: 'Loading document register…',
+    heading: 'Document Control Register',
+    description: 'Documents visible within your assigned role and unit scope.',
+    empty: 'No documents recorded in your scope yet.',
+    caption: 'Document control register — documents visible within your assigned role and unit scope.',
+  },
+  workflows: {
+    loading: 'Loading review tasks…',
+    heading: 'Review & approval',
+    description: 'Documents with workflow decisions waiting for your active role and unit scope.',
+    empty: 'No workflow decisions are waiting for your role.',
+    caption: 'Review and approval — documents with workflow decisions waiting for your active role and unit scope.',
+  },
+}
+
+export default function DocumentRegistry({ view = 'registry' }: { view?: RegistryView }) {
+  const copy = VIEW_COPY[view]
   const [registry, setRegistry] = useState<RegistryData | null>(null)
   const [codes, setCodes] = useState<CodeData | null>(null)
   const [masterEntries, setMasterEntries] = useState<MasterEntry[] | null>(null)
@@ -245,7 +265,11 @@ export default function DocumentRegistry() {
 
   const [expandedId, setExpandedId] = useState<number | null>(null)
   if (accessDenied) return <section className="panel registry-panel"><h2>Document registry</h2><p className="registry-empty">You don’t have access to the document registry.</p></section>
-  if (!registry && !error) return <section className="panel registry-panel"><p>Loading document register…</p></section>
+  const rows = view === 'workflows'
+    ? (registry?.data.filter((document) => document.versions.some((version) => version.workflow_tasks.length > 0)) ?? [])
+    : (registry?.data ?? [])
+
+  if (!registry && !error) return <section className="panel registry-panel" aria-busy="true"><p>{copy.loading}</p></section>
 
   function renderDetails(document: DocumentRow) {
     const canEditUnit = registry!.create_units.some((unit) => unit.id === document.owning_unit_id)
@@ -299,7 +323,7 @@ export default function DocumentRegistry() {
     {error && <p className="registry-message registry-error" role="alert">{error}</p>}
     {notice && <p className="registry-message registry-success" role="status">{notice}</p>}
 
-    {!!registry?.create_units.length && <form className="panel registry-create" onSubmit={createDocument}>
+    {view === 'registry' && !!registry?.create_units.length && <form className="panel registry-create" onSubmit={createDocument}>
       <div className="panel-heading"><div><h2>Register a document</h2><p>Requests begin at revision 1.0 and await official code assignment.</p></div></div>
       <label>Document title<input name="title" required maxLength={500} autoComplete="off" {...fieldErrorProps('title')} onChange={() => clearFieldError('title')} />{fieldError(fieldErrors, 'title')}</label>
       <div className="registry-form-grid">
@@ -313,21 +337,21 @@ export default function DocumentRegistry() {
     </form>}
 
     <section className="panel registry-panel">
-      <div className="panel-heading"><div><h2>Document Control Register</h2><p>Documents visible within your assigned role and unit scope.</p></div>
-        <div className="registry-actions">
+      <div className="panel-heading"><div><h2>{copy.heading}</h2><p>{copy.description}</p></div>
+        {view === 'registry' && <div className="registry-actions">
           {registry?.can_view_master_code_register && <button className="button button-secondary" type="button" onClick={loadMasterRegister}>View Master Code Register</button>}
           {registry?.can_assign_code && <button className="button button-secondary" type="button" onClick={loadCodeLists}>Load official code lists</button>}
-        </div>
+        </div>}
       </div>
-      {registry?.can_assign_code && titleSizePt !== null && <form className="lifecycle-actions" onSubmit={(event) => void saveTitleSize(event)}><label>KMT title-size default (pt)<input type="number" min="1" max="200" inputMode="numeric" value={titleSizePt} onChange={(event) => setTitleSizePt(Number(event.target.value))} required /></label><button className="button button-secondary" disabled={busy}>{busy ? 'Saving…' : 'Save setting'}</button><details><summary>Setting version history</summary><ul>{titleSettingHistory.map((entry, index) => <li key={`${entry.changed_at}-${index}`}>{entry.old_value ?? 'unset'} → {entry.new_value} pt · {entry.changed_by} · {new Date(entry.changed_at).toLocaleString()}</li>)}</ul></details></form>}
+      {view === 'registry' && registry?.can_assign_code && titleSizePt !== null && <form className="lifecycle-actions" onSubmit={(event) => void saveTitleSize(event)}><label>KMT title-size default (pt)<input type="number" min="1" max="200" inputMode="numeric" value={titleSizePt} onChange={(event) => setTitleSizePt(Number(event.target.value))} required /></label><button className="button button-secondary" disabled={busy}>{busy ? 'Saving…' : 'Save setting'}</button><details><summary>Setting version history</summary><ul>{titleSettingHistory.map((entry, index) => <li key={`${entry.changed_at}-${index}`}>{entry.old_value ?? 'unset'} → {entry.new_value} pt · {entry.changed_by} · {new Date(entry.changed_at).toLocaleString()}</li>)}</ul></details></form>}
 
-      {!registry?.data.length ? <div className="registry-empty">No documents recorded in your scope yet.</div> : <div className="registry-table-wrap" role="region" tabIndex={0} aria-labelledby="registry-table-caption">
+      {!rows.length ? <div className="registry-empty">{copy.empty}</div> : <div className="registry-table-wrap" role="region" tabIndex={0} aria-labelledby="registry-table-caption">
         <table className="registry-table">
-          <caption className="sr-only" id="registry-table-caption">Document control register — documents visible within your assigned role and unit scope.</caption>
+          <caption className="sr-only" id="registry-table-caption">{copy.caption}</caption>
           <colgroup><col className="col-code" /><col className="col-title" /><col className="col-owner" /><col className="col-status" /><col className="col-date" /><col className="col-actions" /></colgroup>
           <thead><tr><th scope="col">Code / revision</th><th scope="col">Title</th><th scope="col">Owner / unit</th><th scope="col">Status</th><th scope="col" className="is-date">Effective</th><th scope="col"><span className="sr-only">Row actions</span></th></tr></thead>
           <tbody>
-            {registry.data.map((document) => {
+            {rows.map((document) => {
               const latest = document.versions[document.versions.length - 1]
               const open = expandedId === document.id
               return <Fragment key={document.id}>
@@ -347,9 +371,9 @@ export default function DocumentRegistry() {
       </div>}
     </section>
 
-    {registry?.data.some((document) => document.versions.some((version) => version.files.some((file) => file.validation_runs?.length))) && <section className="panel registry-panel"><div className="panel-heading"><div><h2>Submission check results</h2><p>Automatic findings are tied to each exact uploaded file and validation run.</p></div></div>{registry.data.flatMap((document) => document.versions.flatMap((version) => version.files.flatMap((file) => (file.validation_runs ?? []).map((run) => <article className="audit-event" key={`${file.id}-${run.run_number}`}><div><strong>{document.title} · Rev {version.revision_label} · {file.original_filename}</strong><small>Run {run.run_number}: {run.status}{run.code_source ? ` · code ${run.code_source}` : ''}{run.extracted_code ? ` · ${run.extracted_code}` : ''}</small><ul>{run.findings.map((finding, index) => <li key={`${finding.rule}-${index}`}>{finding.rule.replaceAll('_', ' ')}: {finding.result}{finding.detail ? ` · ${typeof finding.detail === 'string' ? finding.detail : JSON.stringify(finding.detail)}` : ''}</li>)}</ul></div></article>))))}</section>}
-    {!!registry?.data.some((document) => document.audit_events.length > 0) && <section className="panel registry-panel"><div className="panel-heading"><div><h2>Audit history</h2><p>Recorded actions for documents visible within your scope.</p></div></div><div className="audit-timeline">{registry.data.flatMap((document) => document.audit_events.map((event) => ({ ...event, documentTitle: document.title, code: document.display_code }))).map((event) => <article key={event.id} className="audit-event"><span className="audit-event-mark" /><div><strong>{event.event_type.replaceAll('.', ' ').replaceAll('_', ' ')}</strong><p>{event.documentTitle}{event.code ? ` · ${event.code}` : ''}</p>{event.from_state && event.to_state && <small>{event.from_state.replaceAll('_', ' ')} → {event.to_state.replaceAll('_', ' ')}</small>}{event.reason && <small>{event.reason}</small>}</div><time>{event.occurred_at ? new Date(event.occurred_at).toLocaleString() : ''}<small>{event.actor ?? 'System'}</small></time></article>)}</div></section>}
-    {masterEntries && <section className="panel registry-panel"><div className="panel-heading"><div><h2>Master Code Register</h2><p>Official code assignments maintained separately from document metadata.</p></div></div>
+    {view === 'registry' && registry?.data.some((document) => document.versions.some((version) => version.files.some((file) => file.validation_runs?.length))) && <section className="panel registry-panel"><div className="panel-heading"><div><h2>Submission check results</h2><p>Automatic findings are tied to each exact uploaded file and validation run.</p></div></div>{registry.data.flatMap((document) => document.versions.flatMap((version) => version.files.flatMap((file) => (file.validation_runs ?? []).map((run) => <article className="audit-event" key={`${file.id}-${run.run_number}`}><div><strong>{document.title} · Rev {version.revision_label} · {file.original_filename}</strong><small>Run {run.run_number}: {run.status}{run.code_source ? ` · code ${run.code_source}` : ''}{run.extracted_code ? ` · ${run.extracted_code}` : ''}</small><ul>{run.findings.map((finding, index) => <li key={`${finding.rule}-${index}`}>{finding.rule.replaceAll('_', ' ')}: {finding.result}{finding.detail ? ` · ${typeof finding.detail === 'string' ? finding.detail : JSON.stringify(finding.detail)}` : ''}</li>)}</ul></div></article>))))}</section>}
+    {view === 'registry' && !!registry?.data.some((document) => document.audit_events.length > 0) && <section className="panel registry-panel"><div className="panel-heading"><div><h2>Audit history</h2><p>Recorded actions for documents visible within your scope.</p></div></div><div className="audit-timeline">{registry.data.flatMap((document) => document.audit_events.map((event) => ({ ...event, documentTitle: document.title, code: document.display_code }))).map((event) => <article key={event.id} className="audit-event"><span className="audit-event-mark" /><div><strong>{event.event_type.replaceAll('.', ' ').replaceAll('_', ' ')}</strong><p>{event.documentTitle}{event.code ? ` · ${event.code}` : ''}</p>{event.from_state && event.to_state && <small>{event.from_state.replaceAll('_', ' ')} → {event.to_state.replaceAll('_', ' ')}</small>}{event.reason && <small>{event.reason}</small>}</div><time>{event.occurred_at ? new Date(event.occurred_at).toLocaleString() : ''}<small>{event.actor ?? 'System'}</small></time></article>)}</div></section>}
+    {view === 'registry' && masterEntries && <section className="panel registry-panel"><div className="panel-heading"><div><h2>Master Code Register</h2><p>Official code assignments maintained separately from document metadata.</p></div></div>
       <div className="registry-table-wrap"><table className="registry-table"><thead><tr><th>Base code</th><th>Components</th><th>Document</th><th>Requested</th><th>Assigned by / date</th></tr></thead><tbody>{masterEntries.map((entry) => <tr key={entry.id}><td><strong>{entry.base_code}</strong><small>Rev {entry.document.current_revision_label}</small></td><td>{[entry.service_component, entry.section_component, entry.unit_component, entry.document_type_component].filter(Boolean).map((item) => item!.code).join(' / ')}</td><td>{entry.document.title}<small>{entry.document.owning_unit.name}</small></td><td>{new Date(entry.requested_at).toLocaleDateString()}</td><td>{entry.assigned_by.name}<small>{new Date(entry.assigned_at).toLocaleDateString()}</small></td></tr>)}</tbody></table></div>
     </section>}
   </div>

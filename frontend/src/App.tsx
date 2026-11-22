@@ -146,11 +146,26 @@ function App() {
     return false
   })
 
+  const loadDashboard = useCallback(() => {
+    setDashboardState('loading')
+    authRequest('/dashboard')
+      .then((data) => { setDashboardWidgets(data.widgets ?? []); setDashboardState('ready') })
+      .catch(() => { setDashboardWidgets([]); setDashboardState('error') })
+  }, [])
+
+  // A new session always starts on the overview: one place sets the user, the page,
+  // and the dashboard load, so no effect has to react to the user changing.
+  const adoptSession = useCallback((user: AuthUser) => {
+    setAuthUser(user)
+    setActivePage('overview')
+    loadDashboard()
+  }, [loadDashboard])
+
   useEffect(() => {
     let active = true
 
     authRequest('/auth/user')
-      .then((result) => { if (active) setAuthUser(result.user) })
+      .then((result) => { if (active) adoptSession(result.user) })
       .catch((error: unknown) => {
         if (active && !(error instanceof Error && error.message === 'Unauthenticated.')) {
           setAuthError('Could not reach the DCMS sign-in service. Start the Laravel server and refresh this page.')
@@ -159,20 +174,7 @@ function App() {
       .finally(() => { if (active) setAuthLoading(false) })
 
     return () => { active = false }
-  }, [])
-
-  const loadDashboard = useCallback(() => {
-    setDashboardState('loading')
-    authRequest('/dashboard')
-      .then((data) => { setDashboardWidgets(data.widgets ?? []); setDashboardState('ready') })
-      .catch(() => { setDashboardWidgets([]); setDashboardState('error') })
-  }, [])
-
-  useEffect(() => {
-    if (!authUser) return
-    setActivePage('overview')
-    loadDashboard()
-  }, [authUser?.id, loadDashboard])
+  }, [adoptSession])
 
   useEffect(() => {
     document.title = authUser ? `${pageTitle} · ONP DCMS` : 'Sign in · ONP DCMS'
@@ -222,7 +224,7 @@ function App() {
         password: String(form.get('password') ?? ''),
       })
       setLoginErrors({})
-      setAuthUser(result.user)
+      adoptSession(result.user)
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : 'Sign-in failed.')
     } finally {
@@ -486,7 +488,7 @@ function App() {
             </div>
           </section>
 
-          {activePage === 'registry' && !permissions.has('document.registry.view') ? <section className="panel"><h2>Document registry</h2><p className="registry-empty">You don’t have access to the document registry.</p></section> : visibleMainNavigation.some((item) => item.id === activePage) && (activePage === 'registry' || activePage === 'tasks' || activePage === 'workflows') ? <DocumentRegistry /> : visibleMainNavigation.some((item) => item.id === activePage) && activePage === 'distribution' ? <DistributionInbox /> : visibleMainNavigation.some((item) => item.id === activePage) && activePage === 'migration' ? <DocumentMigration /> : visibleMainNavigation.some((item) => item.id === activePage) && activePage === 'external-references' ? <ExternalReferences /> : visibleMainNavigation.some((item) => item.id === activePage) && activePage === 'records' ? <OperationalRecords /> : visibleMainNavigation.some((item) => item.id === activePage) && activePage === 'reports' ? <ReportsDashboard /> : activePage === 'organization' && authUser.is_system_admin ? <InstitutionConfiguration /> : activePage === 'access' && authUser.is_system_admin ? <UserAdministration /> : activePage === 'document-configuration' && authUser.is_system_admin ? <DocumentConfiguration /> : activePage === 'settings' && authUser.is_system_admin ? <WorkflowConfiguration /> : activePage === 'overview' ? (
+          {activePage === 'registry' && !permissions.has('document.registry.view') ? <section className="panel"><h2>Document registry</h2><p className="registry-empty">You don’t have access to the document registry.</p></section> : visibleMainNavigation.some((item) => item.id === activePage) && (activePage === 'registry' || activePage === 'tasks' || activePage === 'workflows') ? <DocumentRegistry view={activePage === 'workflows' ? 'workflows' : 'registry'} /> : visibleMainNavigation.some((item) => item.id === activePage) && activePage === 'distribution' ? <DistributionInbox /> : visibleMainNavigation.some((item) => item.id === activePage) && activePage === 'migration' ? <DocumentMigration /> : visibleMainNavigation.some((item) => item.id === activePage) && activePage === 'external-references' ? <ExternalReferences /> : visibleMainNavigation.some((item) => item.id === activePage) && activePage === 'records' ? <OperationalRecords /> : visibleMainNavigation.some((item) => item.id === activePage) && activePage === 'reports' ? <ReportsDashboard /> : activePage === 'organization' && authUser.is_system_admin ? <InstitutionConfiguration /> : activePage === 'access' && authUser.is_system_admin ? <UserAdministration /> : activePage === 'document-configuration' && authUser.is_system_admin ? <DocumentConfiguration /> : activePage === 'settings' && authUser.is_system_admin ? <WorkflowConfiguration /> : activePage === 'overview' ? (
             <>
               <section className="summary-strip" aria-labelledby="summary-strip-heading" aria-busy={dashboardState === 'loading'}>
                 <h2 className="sr-only" id="summary-strip-heading">Summary for your role</h2>
