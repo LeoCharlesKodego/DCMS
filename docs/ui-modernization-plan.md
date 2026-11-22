@@ -795,3 +795,43 @@ Administration forms, workflow configuration, reports, and the remaining modules
 - The table treatment is shared: a caption, `scope="col"`/`scope="row"` headers, a sticky `thead`, end-aligned `is-date` columns with tabular numerals, and stamped status labels. The Records scroller carries `scroll-padding-block-start` and `scroll-margin-block-start` from `--topbar-height`, like the register.
 - React hooks warnings are gone from every file touched here: the records load no longer sets state synchronously inside its effect. Four pre-existing warnings remain in `ExternalReferences`, `NotificationCenter`, and `DocumentMigration` (two).
 - Coverage: `e2e/tasks-records.spec.ts` covers, with real seeded samples, My tasks listing the returned procedure with a `submit` lifecycle action for the Process Owner and the empty state for the MCC; Records & retention registers a record, records a hold and shows it on the row; and a mocked load failure reports the error with a `Retry` control that recovers. All four tests pass on Chromium, Firefox, and WebKit.
+
+## 11. Final status (Step 0 fixes and gaps + Step 4 screens)
+
+### 11.1 What shipped
+
+- Stall fix (commit `40121f5`): current-pass separation of duties in `WorkflowDecisionService`, backend `WorkflowPassResubmissionTest` plus a real-data resubmission e2e loop.
+- Step 4 screens restyled and tested: Review & approval, Distribution, My tasks, Records & retention, Reports & audit, External references, Document migration.
+- All restyled screens use shared tokens (12 px floor), registry table treatment (caption, `scope`, sticky header, end-aligned numeric/date columns, stamped status labels), loading/empty/error-with-Retry states, per-view titles, and `scroll-margin` for the sticky bar.
+- React hooks warnings removed from every file touched; only `NotificationCenter.tsx` retains one pre-existing warning.
+- Playwright coverage added/updated: `workflow-screens.spec.ts`, `tasks-records.spec.ts`, `reports-external-migration.spec.ts`; real data where seeded, mocked load failures labelled as mocked.
+- Branch pushed: `step-0-fixes-and-gaps`.
+
+### 11.2 Open decisions
+
+- **D-032 (obsolete/withdraw state)**: still open. No obsolete/withdraw feature shipped; the obsolete status appears only as a migration verification outcome, not a lifecycle state.
+- Same-account verify+release setting: unchanged, reads the whole instance as before.
+
+### 11.3 Known limitations
+
+- No manual screen-reader run was performed; coverage is axe-core automated checks only.
+- No browser older than the three Playwright engines (Chromium/Firefox/WebKit) was tested; the notification popover relies on the Popover API with a fallback.
+- Hard-coded `px` values remain in the sidebar, topbar, auth card and admin configuration styles (layout constants predating the token pass); the tokenised screen rules contain none.
+- Hard-coded shadow colour literals (`#172b3705`, etc.) remain in a few legacy shadow declarations.
+- `NotificationCenter.tsx` still carries one pre-existing `react-hooks` warning.
+- Bundle: `index-*.js` ~342 KB, `index-*.css` ~46 KB, two self-hosted woff2 fonts (~35 KB + ~50 KB); no runtime requests to external hosts (verified by an e2e network log).
+
+### 11.4 Manual test checklist for hospital staff
+
+1. Sign in with a KMT account. Expected: Overview loads, no console errors.
+2. Open Document registry. Expected: table with sticky header; columns aligned; empty state if no documents.
+3. Register a new document (create form). Expected: submission checks run; status stamp shows `Submitted` or `Returned`.
+4. KMT verifies the submission. Expected: status `Verified`; row expands to show title/download/distribution panels.
+5. Division Head approves. Expected: status `Approved`.
+6. KMT releases. Expected: status `Released`; distribution inbox receives it.
+7. Staff recipient opens Distribution. Expected: released version listed; acknowledges receipt; stamp flips to `Acknowledged`.
+8. Open My tasks as Process Owner. Expected: returned documents show a `submit` action; empty state otherwise.
+9. Open Records & retention (KMT). Expected: register a record, place a hold; status becomes `On hold`; holds list shows the reason.
+10. Open Reports & audit (KMT). Expected: summary counts and audit table; filters apply; dates consistent.
+11. Open External references (KMT). Expected: register a reference; status stamp `Active`.
+12. Open Document migration (KMT). Expected: create a batch; upload files; verify and register as unreleased draft.
