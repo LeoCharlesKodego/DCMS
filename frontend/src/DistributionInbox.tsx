@@ -23,6 +23,10 @@ const testIds = {
   table: 'distribution-table',
 }
 
+function loadFailure(reason: unknown) {
+  return reason instanceof Error ? reason.message : 'Could not load distributed versions.'
+}
+
 function formatDate(value: string | null) {
   if (!value) return '—'
 
@@ -53,18 +57,31 @@ export default function DistributionInbox() {
   const [busyId, setBusyId] = useState<number | null>(null)
 
   async function refresh() {
-    setError('')
     try {
       const result = await authRequest('/distribution/inbox') as { data: InboxItem[] }
       setItems(result.data)
+      setError('')
     } catch (reason) {
       setItems(null)
-      setError(reason instanceof Error ? reason.message : 'Could not load distributed versions.')
+      setError(loadFailure(reason))
     }
   }
 
   useEffect(() => {
-    void refresh()
+    let active = true
+    authRequest('/distribution/inbox')
+      .then((result) => {
+        if (!active) return
+        setItems((result as { data: InboxItem[] }).data)
+        setError('')
+      })
+      .catch((reason: unknown) => {
+        if (!active) return
+        setItems(null)
+        setError(loadFailure(reason))
+      })
+
+    return () => { active = false }
   }, [])
 
   async function acknowledge(item: InboxItem) {
@@ -78,7 +95,7 @@ export default function DistributionInbox() {
   }
 
   return <div className="registry-layout">
-    {error && <p className="registry-message registry-error" role="alert">{error} {items === null && <button className="text-button" type="button" onClick={() => void refresh()}>Retry</button>}</p>}
+    {error && <p className="registry-message registry-error" role="alert">{error} {items === null && <button className="text-button" type="button" onClick={() => { setError(''); void refresh() }}>Retry</button>}</p>}
     {notice && <p className="registry-message registry-success" role="status">{notice}</p>}
 
     <section className="panel registry-panel" aria-busy={items === null && !error}>
