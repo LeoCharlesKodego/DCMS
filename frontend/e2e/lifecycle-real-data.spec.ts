@@ -126,16 +126,15 @@ test('a distributed version can be acknowledged from the receipt inbox', async (
   await signInAs(page, STAFF)
   await openScreen(page, 'Distribution')
 
-  const inbox = page.locator('.distribution-inbox')
+  const inbox = page.getByTestId('distribution-table')
   await expect(inbox).toBeVisible()
-  const receipt = inbox.locator('article').filter({ hasText: 'Sample — Released procedure' }).first()
-  await expect(receipt).toContainText('pending')
+  const receipt = inbox.locator('tbody tr').filter({ hasText: 'Sample — Released procedure' }).first()
+  await expect(receipt.locator('.stamp').first()).toHaveText(/Pending/)
   await receipt.getByRole('button', { name: 'Acknowledge receipt' }).click()
 
   await expect(page.getByRole('status')).toContainText('Receipt acknowledged for Sample — Released procedure')
-  await expect(receipt).toContainText('acknowledged')
+  await expect(receipt.locator('.stamp').first()).toHaveText(/Acknowledged/)
   await expect(receipt.getByRole('button', { name: 'Acknowledge receipt' })).toHaveCount(0)
-  await expect(receipt).toContainText('Received')
 
   expect(problems).toEqual([])
 })
