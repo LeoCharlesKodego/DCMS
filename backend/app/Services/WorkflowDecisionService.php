@@ -41,7 +41,7 @@ class WorkflowDecisionService
             ->where('status', 'in_progress')
             ->first();
         if (! $instance || $actor->id === $instance->started_by_user_id || $actor->id === $version->created_by_user_id
-            || $this->actorHasPriorDecision($actor, $instance)) {
+            || $this->actorHasDecisionInCurrentPass($actor, $instance)) {
             return [];
         }
 
@@ -109,10 +109,7 @@ class WorkflowDecisionService
             abort_unless(in_array($stage->action_type, ['verification', 'review', 'approval'], true), 403, 'Recommendation and release decisions are unavailable under the current ONP authority rules.');
             abort_unless($this->actorHasTaskAuthority($lockedTask, $actor, $stage->action_type), 403, 'Your active role assignment does not authorize this task and scope.');
             abort_unless($actor->id !== $instance->started_by_user_id && $actor->id !== $version->created_by_user_id, 403, 'The submitter and version originator cannot review or approve their own submission.');
-            abort_unless(! WorkflowDecision::query()
-                ->where('actor_user_id', $actor->id)
-                ->whereHas('task.stageInstance', fn ($query) => $query->where('workflow_instance_id', $instance->id))
-                ->exists(), 403, 'A user who has already decided another stage in this workflow cannot decide this stage.');
+            abort_unless(! $this->actorHasDecisionInCurrentPass($actor, $instance), 403, 'A user who has already decided another stage in this workflow cannot decide this stage.');
 
             $allowedDecisions = match ($stage->action_type) {
                 'verification' => ['verified', 'returned_for_revision'],
@@ -132,7 +129,7 @@ class WorkflowDecisionService
             $documentTypeCode = $document->masterCodeRegisterEntry?->documentTypeComponent?->code;
             if ($stage->action_type === 'approval') {
                 abort_unless(in_array($documentTypeCode, ['MANL', 'PROC', 'GUID'], true), 403, 'The ONP source only assigns MCC final approval to manuals, procedures, and guidelines.');
-                abort_unless(! $this->actorHasPriorDecision($actor, $instance), 403, 'The final approver must be different from all prior reviewers.');
+                abort_unless(! $this->actorHasDecisionInCurrentPass($actor, $instance), 403, 'The final approver must be different from all prior reviewers.');
             }
 
             $decision = WorkflowDecision::query()->create([
@@ -215,11 +212,31 @@ class WorkflowDecisionService
         }
     }
 
-    private function actorHasPriorDecision(User $actor, WorkflowInstance $instance): bool
+    /**
+     * Separation of duties applies within one review pass, not across the whole life of
+     * the instance. A returned submission closes its pass; the resubmission starts a new
+     * one, so a reviewer who acted before the return must be able to review again, while
+     * one account still cannot decide two stages of the same pass. Decisions from earlier,
+     * closed passes stay on record and remain visible in the audit history.
+     */
+    private function actorHasDecisionInCurrentPass(User $actor, WorkflowInstance $instance): bool
     {
+        $currentPass = WorkflowStageInstance::query()
+            ->where('workflow_instance_id', $instance->id)
+            ->whereIn('status', ['pending', 'active'])
+            ->max('pass_no');
+
+        if ($currentPass === null) {
+            $currentPass = WorkflowStageInstance::query()
+                ->where('workflow_instance_id', $instance->id)
+                ->max('pass_no');
+        }
+
         return WorkflowDecision::query()
             ->where('actor_user_id', $actor->id)
-            ->whereHas('task.stageInstance', fn ($query) => $query->where('workflow_instance_id', $instance->id))
+            ->whereHas('task.stageInstance', fn ($query) => $query
+                ->where('workflow_instance_id', $instance->id)
+                ->where('pass_no', (int) $currentPass))
             ->exists();
     }
 

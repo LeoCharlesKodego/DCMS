@@ -8,6 +8,7 @@ import { watchConsole } from './support/session'
 const SAMPLE_PASSWORD = 'LocalDemo!2026'
 const KMT = 'kmt@example.test'
 const MCC = 'mcc@example.test'
+const DIVISION_HEAD = 'division.head@example.test'
 const STAFF = 'staff.recipient@example.test'
 
 async function signInAs(page: Page, email: string, password = SAMPLE_PASSWORD) {
@@ -52,8 +53,8 @@ test('Review & approval shows an empty state when no decision waits for the role
   expect(password).toBeTruthy()
 })
 
-test('Review & approval lists the document whose verification decision is waiting', async ({ page }) => {
-  test.setTimeout(180_000)
+test('a returned submission offers the same verifier a new task after resubmission', async ({ page }) => {
+  test.setTimeout(240_000)
   const problems = watchConsole(page)
 
   // The disposable local account owns the sample unit, so it can submit the draft and
@@ -85,24 +86,64 @@ test('Review & approval lists the document whose verification decision is waitin
   // Table treatment: sticky header, an end-aligned date column, and stamped status.
   const headCell = table.locator('thead th').first()
   await expect(headCell).toHaveCSS('position', 'sticky')
-  const dateCell = table.locator('td.is-date').first()
-  await expect(dateCell).toHaveCSS('text-align', 'end')
+  await expect(table.locator('td.is-date').first()).toHaveCSS('text-align', 'end')
 
-  const row = reviewRow(page, 'Sample — Draft procedure').first()
-  await expect(row).toBeVisible()
-  await expect(row.locator('.stamp').first()).toHaveText(/Registered/)
+  const firstRow = reviewRow(page, 'Sample — Draft procedure').first()
+  await expect(firstRow).toBeVisible()
+  await expect(firstRow.locator('.stamp').first()).toHaveText(/Registered/)
   await expect(page.getByText('No workflow decisions are waiting for your role.')).toHaveCount(0)
 
-  // The decision itself is reachable from this screen, alongside the version's
-  // submitted stamp.
-  const rowToggle = row.locator('button[aria-controls^="document-detail-"]')
-  const rowDetailId = await rowToggle.getAttribute('aria-controls')
-  if ((await rowToggle.getAttribute('aria-expanded')) !== 'true') {
-    await rowToggle.click()
+  // KMT verifies from this screen.
+  const firstToggle = firstRow.locator('button[aria-controls^="document-detail-"]')
+  const firstDetailId = await firstToggle.getAttribute('aria-controls')
+  if ((await firstToggle.getAttribute('aria-expanded')) !== 'true') {
+    await firstToggle.click()
   }
-  const rowDetail = page.locator(`#${rowDetailId}`)
-  await expect(rowDetail.getByText('Submitted', { exact: true })).toBeVisible()
-  await expect(rowDetail.getByRole('button', { name: 'verified' })).toBeVisible()
+  const firstDetail = page.locator(`#${firstDetailId}`)
+  await expect(firstDetail.getByText('Submitted', { exact: true })).toBeVisible()
+  await firstDetail.locator('textarea[name="comment"]').fill('Fictional browser test: sample findings reviewed for the resubmission check.')
+  await firstDetail.getByRole('button', { name: 'verified', exact: true }).click()
+  await expect(page.getByRole('status')).toContainText('Recorded verified')
+
+  // Division Head returns the submission.
+  await signInAs(page, DIVISION_HEAD)
+  await openScreen(page, 'Review & approval')
+  const reviewRowBefore = reviewRow(page, 'Sample — Draft procedure').first()
+  await expect(reviewRowBefore).toBeVisible()
+  const reviewToggle = reviewRowBefore.locator('button[aria-controls^="document-detail-"]')
+  const reviewDetailId = await reviewToggle.getAttribute('aria-controls')
+  if ((await reviewToggle.getAttribute('aria-expanded')) !== 'true') {
+    await reviewToggle.click()
+  }
+  const reviewDetail = page.locator(`#${reviewDetailId}`)
+  await reviewDetail.locator('textarea[name="comment"]').fill('Fictional browser test: section 2 needs correction before approval.')
+  await reviewDetail.getByRole('button', { name: 'Return for revision', exact: true }).click()
+  await expect(page.getByRole('status')).toContainText('Recorded returned for revision')
+
+  // The owner resubmits the corrected version.
+  await signInAs(page, email, password)
+  await openScreen(page, 'Document registry')
+  const resubmitRow = page.getByRole('region', { name: /Document control register/ }).locator('tbody tr').filter({ hasText: 'Sample — Draft procedure' }).first()
+  const resubmitToggle = resubmitRow.locator('button[aria-controls^="document-detail-"]')
+  const resubmitDetailId = await resubmitToggle.getAttribute('aria-controls')
+  if ((await resubmitToggle.getAttribute('aria-expanded')) !== 'true') {
+    await resubmitToggle.click()
+  }
+  await page.locator(`#${resubmitDetailId}`).getByRole('button', { name: 'submit', exact: true }).click()
+  await expect(page.getByRole('status')).toContainText('Recorded submit for revision 1.0')
+
+  // The same KMT role gets the new pass's verification task instead of a silent stall.
+  await signInAs(page, KMT)
+  await openScreen(page, 'Review & approval')
+  const newRow = reviewRow(page, 'Sample — Draft procedure').first()
+  await expect(newRow).toBeVisible()
+  await expect(page.getByText('No workflow decisions are waiting for your role.')).toHaveCount(0)
+  const newToggle = newRow.locator('button[aria-controls^="document-detail-"]')
+  const newDetailId = await newToggle.getAttribute('aria-controls')
+  if ((await newToggle.getAttribute('aria-expanded')) !== 'true') {
+    await newToggle.click()
+  }
+  await expect(page.locator(`#${newDetailId}`).getByRole('button', { name: 'verified', exact: true })).toBeVisible()
 
   expect(problems).toEqual([])
 })
