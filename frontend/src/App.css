@@ -641,3 +641,10 @@ h1 em { color: var(--seal); font-weight: 500; }
   .registry-table .col-actions { width: 15%; }
   .registry-table th, .registry-table td { padding-inline: 10px; }
 }
+
+/* A <summary> is a pointer target: keep its box at least 24px tall, the
+   smallest WCAG target size. */
+summary {
+  min-block-size: 24px;
+  padding-block: 3px;
+}
