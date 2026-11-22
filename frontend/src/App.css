@@ -560,3 +560,84 @@ h1 em { color: var(--seal); font-weight: 500; }
 .audit-event time { color: var(--ink-muted); font-size: var(--text-xs); text-align: right; white-space: nowrap; }
 .audit-event time small { display: block; margin-top: 4px; }
 @media (max-width: 600px) { .audit-event { grid-template-columns: 12px minmax(0, 1fr); } .audit-event time { grid-column: 2; text-align: left; } }
+
+/* ---------------------------------------------------------------------------
+   Shared form fields: one control size, one invalid treatment, one hint style.
+   --------------------------------------------------------------------------- */
+.form-hint {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.registry-create input,
+.registry-create select,
+.registry-create textarea,
+.code-assignment select,
+.version-upload select,
+.version-upload textarea,
+.version-upload input[type="file"],
+.lifecycle-actions textarea,
+.workflow-form input:not([type="checkbox"]),
+.workflow-form select,
+.workflow-form textarea {
+  font-size: 1rem;
+}
+
+:is(
+  .auth-input,
+  .registry-create input,
+  .registry-create select,
+  .registry-create textarea,
+  .code-assignment select,
+  .version-upload select,
+  .version-upload textarea,
+  .lifecycle-actions textarea,
+  .workflow-form input:not([type="checkbox"]),
+  .workflow-form select,
+  .workflow-form textarea
+):user-invalid {
+  border-color: var(--danger);
+}
+
+:is(
+  .auth-input,
+  .registry-create input,
+  .registry-create select,
+  .registry-create textarea,
+  .code-assignment select,
+  .version-upload select,
+  .version-upload textarea,
+  .lifecycle-actions textarea,
+  .workflow-form input:not([type="checkbox"]),
+  .workflow-form select,
+  .workflow-form textarea
+):focus-visible {
+  border-color: var(--seal);
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.button:disabled,
+.config-edit:disabled,
+.text-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+
+/* Below desktop widths the register fits its own scroller rather than hiding the
+   row actions behind a horizontal scrollbar. */
+@media (max-width: 1100px) {
+  /* The reserved gutter plus a percentage-width table overflows by the gutter
+     width in some engines, which pushes the row actions out of view. */
+  .registry-table-wrap { scrollbar-gutter: auto; }
+  .registry-table { min-inline-size: 0; }
+  /* The action button is the widest cell content, so give it the room it needs
+     and take it from the title column, which wraps. */
+  .registry-table .col-title { width: 29%; }
+  .registry-table .col-owner { width: 17%; }
+  .registry-table .col-status { width: 12%; }
+  .registry-table .col-actions { width: 15%; }
+  .registry-table th, .registry-table td { padding-inline: 10px; }
+}
