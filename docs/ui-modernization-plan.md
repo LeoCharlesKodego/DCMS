@@ -747,3 +747,28 @@ Administration forms, workflow configuration, reports, and the remaining modules
 - `Replace current files` is now gated exactly like the backend: owning-unit Process Owner scope plus a version in `draft` or `returned_for_revision`. It no longer depends on the latest version being released, so the owner can correct a returned submission; the backend still refuses a non-owner with 403.
 - Add to register: server validation messages are mapped to their own controls with `aria-invalid`, `aria-describedby`, and `role="alert"` (title, type, category, unit, retention, remarks) instead of one top-level message.
 - Withdrawal/obsolete: added to `governance/OPEN_DECISIONS.md` as D-032 with the source references; nothing was built.
+
+### 10.12 Step 4 screens: Review & approval and Distribution
+
+**Review & approval**
+
+- The screen is the register table in a `workflows` view: it lists only documents whose latest version holds a workflow task visible to the signed-in role, and it drops the register-only panels (add to register, KMT title-size setting, submission checks, merge-package audit, master code register and code lists) so the screen answers one question.
+- Per-view copy: heading `Review & approval`, caption `Review & approval — documents with workflow decisions waiting for your active role and unit scope.`, and the empty state `No workflow decisions are waiting for your role.` The register view keeps its own heading, caption, and empty state.
+- Title, download, distribution, and audit panels stay in the expanded row, so a reviewer can read the file and record the decision without leaving the screen.
+
+**Distribution**
+
+- The card list became a register-style table: `Document` (title, revision, issuer), `Status` (stamped), `Issued` and `Due` (end-aligned dates), `Files` (name, size, SHA-256), and `Receipt` (stamped `Acknowledged` with its date, or the acknowledge action). Each row keeps the exact version and file hashes that were issued.
+- States: `Loading distributions…` while the request is in flight, `No document versions have been distributed to you.` when the list is empty, and the server message with a `Retry` control when the request fails. `aria-busy` marks the panel while loading.
+- Copy: statuses read as sentences (`Pending`, `Acknowledged`, `Expired`), `No files attached`, `Awaiting acknowledgment`, and `No receipt needed` replace the raw enum values.
+
+**Both screens**
+
+- Every registry, stamp, audit, and distribution rule now uses the shared tokens: `--text-xs`/`--text-sm`/`--text-md` for type (12 px floor), `--space-*` for spacing, `--radius-*` for corners, `--hairline` for 1 px rules, and `rem` for the 40 rem table minimum, 47.5 rem scroller cap, and 15/16.25/13.75 rem form minimums. No hard-coded hex or px remains in these rules.
+- The table treatment is shared: a caption, `scope="col"`/`scope="row"` headers, a sticky `thead`, end-aligned `is-date` columns with tabular numerals, and stamped status labels. The Distribution scroller carries `scroll-padding-block-start` and `scroll-margin-block-start` from `--topbar-height`, like the register.
+- React hooks warnings are gone from every file touched here: the distribution load no longer sets state synchronously inside its effect, and `App` now adopts a session (user, page, dashboard load) through one callback instead of an effect reacting to the user changing. Six pre-existing warnings remain in `OperationalRecords`, `ExternalReferences`, `NotificationCenter`, and `DocumentMigration`.
+- Coverage: `e2e/workflow-screens.spec.ts` seeds the samples, submits the draft as the Process Owner, and checks that KMT sees the document on Review & approval with the sticky header, end-aligned date column, stamped status, and the `verified` decision inside the row; MCC sees the empty state. Distribution is checked with the staff recipient acknowledging the released version (stamp flips to `Acknowledged`, the button disappears) and with KMT seeing the empty state. All four tests pass on Chromium, Firefox, and WebKit, and `lifecycle-real-data.spec.ts` was updated to the table markup.
+
+**Reported, not changed**
+
+- A version returned by KMT and resubmitted cannot be verified by KMT again: `WorkflowDecisionService::visibleTasksFor` hides tasks from anyone who already decided on that workflow instance, so after the resubmission the new stage pass is created but no reviewer in the original role sees it. Left as-is because changing it changes workflow authorization; it needs a decision.
