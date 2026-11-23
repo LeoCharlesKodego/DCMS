@@ -80,6 +80,75 @@ class WorkflowDecisionService
             ->all();
     }
 
+    /** Returns a plain-language reason when the actor cannot decide this version, or null when they can or no workflow is active. */
+    public function decisionReasonFor(User $actor, DocumentVersion $version): ?string
+    {
+        $version->loadMissing('document');
+        $document = $version->document;
+        if (! $this->authorization->allows($actor, 'document.registry.view', (int) $document->owning_unit_id)) {
+            return 'You do not have access to this document.';
+        }
+
+        $instance = WorkflowInstance::query()
+            ->where('document_version_id', $version->id)
+            ->where('status', 'in_progress')
+            ->first();
+        if (! $instance) {
+            return null;
+        }
+
+        if ($actor->id === $instance->started_by_user_id || $actor->id === $version->created_by_user_id) {
+            return 'You submitted this document, so you cannot decide it.';
+        }
+
+        if ($this->actorHasDecisionInCurrentPass($actor, $instance)) {
+            return 'You have already decided another step in this review pass.';
+        }
+
+        $documentTypeCode = $document->masterCodeRegisterEntry()->with('documentTypeComponent')->first()?->documentTypeComponent?->code;
+
+        $activeStageInstance = WorkflowStageInstance::query()
+            ->with('templateStage')
+            ->where('workflow_instance_id', $instance->id)
+            ->where('status', 'active')
+            ->first();
+        if (! $activeStageInstance) {
+            return 'No review step is active for this document.';
+        }
+
+        $pendingTasks = WorkflowTask::query()
+            ->with(['role:id,name', 'organizationalUnit:id,name', 'stageInstance.templateStage'])
+            ->where('status', 'pending')
+            ->whereHas('stageInstance', fn ($query) => $query
+                ->where('status', 'active')
+                ->where('workflow_instance_id', $instance->id))
+            ->get();
+
+        foreach ($pendingTasks as $task) {
+            $action = $task->stageInstance->templateStage->action_type;
+            if (! in_array($action, ['verification', 'review', 'approval'], true)) {
+                continue;
+            }
+            if ($action === 'approval' && ! in_array($documentTypeCode, ['MANL', 'PROC', 'GUID'], true)) {
+                continue;
+            }
+            if ($task->assigned_user_id !== null && (int) $task->assigned_user_id !== (int) $actor->id) {
+                continue;
+            }
+            if (! $this->actorHasTaskAuthority($task, $actor, $action)) {
+                continue;
+            }
+
+            return null;
+        }
+
+        if ($activeStageInstance->templateStage->action_type === 'approval' && ! in_array($documentTypeCode, ['MANL', 'PROC', 'GUID'], true)) {
+            return 'This document type does not require final approval.';
+        }
+
+        return 'This step is waiting for another role or unit.';
+    }
+
     public function decide(WorkflowTask $task, User $actor, string $decisionType, ?string $comment = null): WorkflowDecision
     {
         return DB::transaction(function () use ($task, $actor, $decisionType, $comment): WorkflowDecision {

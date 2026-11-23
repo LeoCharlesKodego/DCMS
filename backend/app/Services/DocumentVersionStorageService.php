@@ -6,6 +6,7 @@ use App\Models\Document;
 use App\Models\DocumentFile;
 use App\Models\DocumentVersion;
 use App\Models\User;
+use App\Services\AuthorizationService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -15,7 +16,7 @@ use Throwable;
 
 class DocumentVersionStorageService
 {
-    public function __construct(private readonly SubmissionValidationService $validation) {}
+    public function __construct(private readonly SubmissionValidationService $validation, private readonly ?AuthorizationService $authorization = null) {}
     /** @param list<UploadedFile> $files
      *  @param array{revision_kind?: string, change_summary?: string|null} $metadata
      */
@@ -136,8 +137,15 @@ class DocumentVersionStorageService
         try {
             return DB::transaction(function () use ($version, $actor, $files, $audit, &$storedKeys): DocumentVersion {
                 $locked = DocumentVersion::query()->whereKey($version->id)->lockForUpdate()->firstOrFail();
-                abort_unless(in_array($locked->status, ['draft', 'returned_for_revision'], true), 409, 'Only a draft or returned version may replace its current files.');
                 $document = Document::query()->whereKey($locked->document_id)->lockForUpdate()->firstOrFail();
+                $canReplaceInReview = $this->authorization !== null
+                    && $this->authorization->allows($actor, 'document.review.division_head', (int) $document->owning_unit_id);
+                abort_unless(
+                    in_array($locked->status, ['draft', 'returned_for_revision'], true)
+                        || ($locked->status === 'in_review' && $canReplaceInReview),
+                    409,
+                    'Only a draft or returned version may replace its current files.',
+                );
                 $newFiles = [];
                 foreach ($files as $upload) {
                     $extension = strtolower($upload->getClientOriginalExtension());

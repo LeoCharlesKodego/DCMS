@@ -588,9 +588,26 @@ h1 em { color: var(--seal); font-weight: 500; }
 .notification-empty { margin: 0; padding: 18px 16px; color: var(--ink-muted); font-size: var(--text-xs); }
 .notification-error { color: var(--danger); }
 .lifecycle-actions textarea { min-width: 13.75rem; }
+.decision-panel { grid-column: 1 / -1; width: 100%; }
+.decision-form { display: grid; gap: var(--space-2); width: 100%; }
+.decision-form textarea { width: 100%; min-inline-size: 0; }
+.decision-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.decision-reason { color: var(--ink-muted); }
 .audit-timeline { display: grid; }
 .audit-event { display: grid; grid-template-columns: var(--space-3) minmax(0, 1fr) auto; gap: var(--space-3); align-items: start; padding: var(--space-3) var(--space-1); border-bottom: var(--hairline) solid var(--rule); }
 .audit-event:last-child { border-bottom: 0; }
+/* Check runs and distribution history have no marker or timestamp, so they stack
+   as plain blocks instead of borrowing the three-column audit timeline grid. */
+.detail-record { display: grid; flex: 1 1 100%; gap: var(--space-2); min-inline-size: 0; padding: var(--space-3) var(--space-1); border-bottom: var(--hairline) solid var(--rule); }
+.detail-record:last-child { border-bottom: 0; }
+.detail-record > div { display: grid; min-inline-size: 0; gap: 4px; }
+.detail-record strong { overflow-wrap: anywhere; }
+.detail-record small { color: var(--ink-muted); font-size: var(--text-xs); }
+.check-findings { display: grid; margin: 0; padding: 0; list-style: none; }
+.check-finding { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); min-inline-size: 0; padding-block: var(--space-2); border-top: var(--hairline) solid var(--rule); }
+.check-finding:first-child { border-top: 0; }
+.check-finding-name { font-size: var(--text-sm); font-weight: 600; overflow-wrap: anywhere; }
+.check-finding-detail { flex: 1 1 16rem; min-inline-size: 0; color: var(--ink-muted); font-size: var(--text-sm); overflow-wrap: anywhere; }
 
 .workflow-config { display: grid; gap: 15px; }
 .workflow-config-panel { min-width: 0; padding: 19px; }

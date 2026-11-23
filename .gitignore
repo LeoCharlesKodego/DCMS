@@ -1,6 +1,7 @@
 /.local-tools/
 /backend/.local-tools/
 /backend/.env
+/backend/.env.mysql.bak
 /backend/.env.ngrok
 /backend/public/shared/
 /backend/local-demo/backups/
@@ -14,6 +15,10 @@
 /backend/node_modules/
 /backend/.env.dev-local
 /backend/database/local-dev.sqlite
+/backend/database/database.sqlite
+# Local test accounts reference (contains passwords)
+/USER.md
+/user.md
 /frontend/e2e/screenshots/
 /frontend/test-results/
 /frontend/playwright-report/

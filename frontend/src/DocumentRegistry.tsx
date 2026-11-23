@@ -13,6 +13,7 @@ type VersionRow = {
   id: number; revision_label: string; status: string; change_summary: string | null; proposed_effective_date: string | null; effective_date: string | null
   created_at: string | null; available_actions: string[]; lifecycle_note: string | null; files: { id: number; original_filename: string; media_type: string; byte_size: number; sha256: string; uploaded_at: string | null; is_current: boolean; validation_runs?: { run_number: number; status: string; code_source: string | null; extracted_code: string | null; findings: { rule: string; result: string; detail?: unknown }[] }[] }[]
   workflow_tasks: { id: number; stage_name: string; action_type: string; role: string; organizational_unit: string | null; decisions: string[] }[]
+  decision_reason?: string | null
   distributions: { id: number; issued_at: string | null; issued_by: string | null; targets: string[]; recipients: { id: number; user_id: number; name: string; acknowledgment_required: boolean; status: string; due_at: string | null; acknowledged_at: string | null; acknowledged_by: string | null; can_acknowledge: boolean; can_exempt: boolean }[] }[]
 }
 type Option = { id: number; name: string; unit_type?: string; parent_service_id?: number; code?: string; source_group?: string }
@@ -301,14 +302,39 @@ export default function DocumentRegistry({ view = 'registry' }: { view?: Registr
         {version.change_summary && <p>{version.change_summary}</p>}
         {version.lifecycle_note && <small className="lifecycle-note">{version.lifecycle_note}</small>}
 
-        {!!version.distributions.length && <div className="lifecycle-actions"><h4>Distribution history</h4>{version.distributions.map((distribution) => <article className="audit-event" key={distribution.id}><div><strong>Issued {distribution.issued_at ? new Date(distribution.issued_at).toLocaleString() : ''}</strong><small>By {distribution.issued_by ?? 'KMT'}{distribution.targets.length ? ` · ${distribution.targets.join(', ')}` : ''}</small>{distribution.recipients.map((recipient) => <div key={recipient.id}><span>{recipient.name}: {readableStatus(recipient.status)}</span>{recipient.due_at && <small> · due {recipient.due_at}</small>}{recipient.acknowledged_at && <small> · acknowledged {new Date(recipient.acknowledged_at).toLocaleString()}</small>}{recipient.can_acknowledge && <button className="button button-secondary" type="button" disabled={busy} onClick={() => acknowledgeDistribution(recipient.id, document, version)}>{busy ? 'Acknowledging…' : 'Acknowledge receipt'}</button>}{recipient.can_exempt && <form onSubmit={(event) => exemptDistribution(event, recipient.id, document, version)}><label>Exemption reason<textarea name="reason" rows={2} required maxLength={4000} aria-describedby={`exempt-${recipient.id}-help`} /></label><p className="form-hint" id={`exempt-${recipient.id}-help`}>{'The reason is recorded in the distribution history.'}</p><button className="button button-secondary" disabled={busy}>{busy ? 'Exempting…' : 'Exempt this recipient'}</button></form>}</div>)}</div></article>)}</div>}
+        {(() => {
+          const decisionVersions = document.versions.filter((item) => item.workflow_tasks.length > 0 || item.decision_reason)
+          if (!decisionVersions.length) return null
+          return <section className="panel decision-panel" aria-labelledby={`decision-${document.id}`}>
+            <div className="panel-heading"><div><h2 id={`decision-${document.id}`}>Your decision</h2><p>Approval steps waiting for your active role and unit scope.</p></div></div>
+            {decisionVersions.map((decisionVersion) => {
+              const task = decisionVersion.workflow_tasks[0]
+              if (!task) {
+                return <p className="decision-reason" key={decisionVersion.id}>{decisionVersion.decision_reason ?? 'No approval decision is waiting for you on this document.'}</p>
+              }
+              const approveDecision = task.decisions.find((decision) => decision !== 'returned_for_revision') ?? 'approved'
+              return <form key={decisionVersion.id} className="decision-form" onSubmit={(event) => workflowDecision(event, document, decisionVersion, task.id)}>
+                <p><strong>{task.stage_name}</strong> is waiting for you on revision {decisionVersion.revision_label}.</p>
+                <small>{task.action_type.replaceAll('_', ' ')} · {task.role}{task.organizational_unit ? ` · ${task.organizational_unit}` : ' · Institution scope'}</small>
+                <label>Reason<textarea name="comment" rows={3} maxLength={4000} placeholder="Write a reason if you are returning this document" aria-invalid={decisionError?.taskId === task.id ? true : undefined} aria-describedby={decisionError?.taskId === task.id ? `task-${task.id}-help task-${task.id}-error` : `task-${task.id}-help`} /></label>
+                <p className="form-hint" id={`task-${task.id}-help`}>A written reason is required to return this document.</p>
+                {decisionError?.taskId === task.id && <p className="field-error" id={`task-${task.id}-error`} role="alert">{decisionError.message}</p>}
+                <div className="decision-actions">
+                  <button className="button button-primary" type="submit" name="decision_type" value={approveDecision} disabled={busy}>{busy ? 'Recording…' : 'Approve'}</button>
+                  <button className="button button-secondary" type="submit" name="decision_type" value="returned_for_revision" disabled={busy}>{busy ? 'Returning…' : 'Return for revision'}</button>
+                </div>
+              </form>
+            })}
+          </section>
+        })()}
+
+        {!!version.distributions.length && <div className="lifecycle-actions"><h4>Distribution history</h4>{version.distributions.map((distribution) => <article className="detail-record" key={distribution.id}><div><strong>Issued {distribution.issued_at ? new Date(distribution.issued_at).toLocaleString() : ''}</strong><small>By {distribution.issued_by ?? 'KMT'}{distribution.targets.length ? ` · ${distribution.targets.join(', ')}` : ''}</small>{distribution.recipients.map((recipient) => <div key={recipient.id}><span>{recipient.name}: {readableStatus(recipient.status)}</span>{recipient.due_at && <small> · due {recipient.due_at}</small>}{recipient.acknowledged_at && <small> · acknowledged {new Date(recipient.acknowledged_at).toLocaleString()}</small>}{recipient.can_acknowledge && <button className="button button-secondary" type="button" disabled={busy} onClick={() => acknowledgeDistribution(recipient.id, document, version)}>{busy ? 'Acknowledging…' : 'Acknowledge receipt'}</button>}{recipient.can_exempt && <form onSubmit={(event) => exemptDistribution(event, recipient.id, document, version)}><label>Exemption reason<textarea name="reason" rows={2} required maxLength={4000} aria-describedby={`exempt-${recipient.id}-help`} /></label><p className="form-hint" id={`exempt-${recipient.id}-help`}>{'The reason is recorded in the distribution history.'}</p><button className="button button-secondary" disabled={busy}>{busy ? 'Exempting…' : 'Exempt this recipient'}</button></form>}</div>)}</div></article>)}</div>}
 
         {registry!.can_distribute && version.status === 'released' && <div className="lifecycle-actions"><button className="button button-secondary" type="button" disabled={busy} onClick={loadDistributionTargets}>Prepare distribution</button>{distributionTargets && <form onSubmit={(event) => issueDistribution(event, document, version)}><label>Targets<select name="targets" required multiple size={5} aria-describedby={`distribution-${version.id}-help`}>{distributionTargets.map((target) => <option key={`${target.target_type}:${target.id}`} value={`${target.target_type}:${target.id}`}>{target.target_type.replaceAll('_', ' ')} · {target.label}</option>)}</select></label><p className="form-hint" id={`distribution-${version.id}-help`}>{'Choose one or more units, roles, or individual recipients.'}</p><label><input type="checkbox" name="acknowledgment_required" defaultChecked /> Require recipient acknowledgment</label><label>Optional acknowledgment due date<input name="due_at" type="date" autoComplete="off" /></label><button className="button button-primary" disabled={busy}>{busy ? 'Issuing…' : 'Issue exact-version distribution'}</button></form>}</div>}
 
-        {!!version.workflow_tasks.length && <div className="lifecycle-actions"><h4>My workflow tasks</h4>{version.workflow_tasks.map((task) => <form key={task.id} onSubmit={(event) => workflowDecision(event, document, version, task.id)}><strong>{task.stage_name}</strong><small>{task.action_type.replaceAll('_', ' ')} · {task.role}{task.organizational_unit ? ` · ${task.organizational_unit}` : ' · Institution scope'}</small><textarea name="comment" rows={2} maxLength={4000} placeholder="Reason required for return or resolving findings" aria-invalid={decisionError?.taskId === task.id ? true : undefined} aria-describedby={decisionError?.taskId === task.id ? `task-${task.id}-help task-${task.id}-error` : `task-${task.id}-help`} /><p className="form-hint" id={`task-${task.id}-help`}>{'A reason is required to return a document or to resolve submission warnings.'}</p>{decisionError?.taskId === task.id && <p className="field-error" id={`task-${task.id}-error`} role="alert">{decisionError.message}</p>}<div>{task.decisions.filter((decision) => decision !== 'returned_for_revision').map((decision) => <button key={decision} className="button button-secondary" type="submit" name="decision_type" value={decision} disabled={busy}>{decision.replaceAll('_', ' ')}</button>)}<button className="button button-secondary" type="submit" name="decision_type" value="returned_for_revision" disabled={busy}>Return for revision</button></div></form>)}</div>}
 
         {version.files.map((file) => <a key={file.id} href={`/api/document-files/${file.id}/download`}>{file.original_filename}<small>{(file.byte_size / 1048576).toFixed(2)} MiB · SHA-256 {file.sha256}</small></a>)}
-        {canEditUnit && (version.status === 'draft' || version.status === 'returned_for_revision') && <details className="version-upload"><summary>Replace current files and rerun checks</summary><form onSubmit={(event) => replaceFiles(event, document, version)} encType="multipart/form-data"><label>Corrected files (PDF, DOCX, XLSX, JPEG, PNG; up to {uploadLimitLabel} each)<input type="file" name="files[]" multiple required accept=".pdf,.docx,.xlsx,.jpg,.jpeg,.png" /></label><button className="button button-primary" disabled={busy}>Replace current file set</button></form></details>}
+        {canEditUnit && (version.status === 'draft' || version.status === 'returned_for_revision' || version.status === 'in_review') && <details className="version-upload"><summary>Replace current files and rerun checks</summary><form onSubmit={(event) => replaceFiles(event, document, version)} encType="multipart/form-data"><label>Corrected files (PDF, DOCX, XLSX, JPEG, PNG; up to {uploadLimitLabel} each)<input type="file" name="files[]" multiple required accept=".pdf,.docx,.xlsx,.jpg,.jpeg,.png" /></label><button className="button button-primary" disabled={busy}>Replace current file set</button></form></details>}
         {!!version.available_actions.length && <div className="lifecycle-actions">{version.available_actions.map((action) => <form key={action} onSubmit={(event) => lifecycleAction(event, document, version)}><input type="hidden" name="action" value={action} />{action === 'return_for_revision' && <><textarea name="reason" rows={2} required placeholder="Reason for return" aria-describedby={`lifecycle-${version.id}-${action}-help`} /><p className="form-hint" id={`lifecycle-${version.id}-${action}-help`}>{'The reason is recorded against this version.'}</p></>}{(action === 'propose_effective_date' || action === 'confirm_effective_date') && <label>{action === 'propose_effective_date' ? 'Proposed effective date' : 'Confirm proposed effective date'}<input name="effective_date" type="date" required defaultValue={action === 'confirm_effective_date' ? version.proposed_effective_date ?? '' : ''} /></label>}<button className="button button-secondary" disabled={busy}>{busy ? 'Recording…' : action.replaceAll('_', ' ')}</button></form>)}</div>}
       </article>)}
 
@@ -382,7 +408,7 @@ export default function DocumentRegistry({ view = 'registry' }: { view?: Registr
       </div>}
     </section>
 
-    {isRegister && registry?.data.some((document) => document.versions.some((version) => version.files.some((file) => file.validation_runs?.length))) && <section className="panel registry-panel"><div className="panel-heading"><div><h2>Submission check results</h2><p>Automatic findings are tied to each exact uploaded file and validation run.</p></div></div>{registry.data.flatMap((document) => document.versions.flatMap((version) => version.files.flatMap((file) => (file.validation_runs ?? []).map((run) => <article className="audit-event" key={`${file.id}-${run.run_number}`}><div><strong>{document.title} · Rev {version.revision_label} · {file.original_filename}</strong><small>Run {run.run_number}: {run.status}{run.code_source ? ` · code ${run.code_source}` : ''}{run.extracted_code ? ` · ${run.extracted_code}` : ''}</small><ul>{run.findings.map((finding, index) => <li key={`${finding.rule}-${index}`}>{finding.rule.replaceAll('_', ' ')}: {finding.result}{finding.detail ? ` · ${typeof finding.detail === 'string' ? finding.detail : JSON.stringify(finding.detail)}` : ''}</li>)}</ul></div></article>))))}</section>}
+    {isRegister && registry?.data.some((document) => document.versions.some((version) => version.files.some((file) => file.validation_runs?.length))) && <section className="panel registry-panel"><div className="panel-heading"><div><h2>Submission check results</h2><p>Automatic findings are tied to each exact uploaded file and validation run.</p></div></div>{registry.data.flatMap((document) => document.versions.flatMap((version) => version.files.flatMap((file) => (file.validation_runs ?? []).map((run) => <article className="detail-record check-run" key={`${file.id}-${run.run_number}`}><div className="check-run-head"><strong>{document.title} · Rev {version.revision_label} · {file.original_filename}</strong><small>Run {run.run_number}: {readableStatus(run.status)}{run.code_source ? ` · code ${run.code_source}` : ''}{run.extracted_code ? ` · ${run.extracted_code}` : ''}</small></div><ul className="check-findings">{run.findings.map((finding, index) => { const detail = formatFindingDetail(finding.rule, finding.detail); return <li className="check-finding" key={`${finding.rule}-${index}`}><span className="check-finding-name">{readableStatus(finding.rule.replaceAll('_', ' '))}</span><span className={`stamp stamp-${findingTone(finding.result)}`}>{readableStatus(finding.result)}</span>{detail && <span className="check-finding-detail">{detail}</span>}</li> })}</ul></article>))))}</section>}
     {isRegister && !!registry?.data.some((document) => document.audit_events.length > 0) && <section className="panel registry-panel"><div className="panel-heading"><div><h2>Audit history</h2><p>Recorded actions for documents visible within your scope.</p></div></div><div className="audit-timeline">{registry.data.flatMap((document) => document.audit_events.map((event) => ({ ...event, documentTitle: document.title, code: document.display_code }))).map((event) => <article key={event.id} className="audit-event"><span className="audit-event-mark" /><div><strong>{event.event_type.replaceAll('.', ' ').replaceAll('_', ' ')}</strong><p>{event.documentTitle}{event.code ? ` · ${event.code}` : ''}</p>{event.from_state && event.to_state && <small>{event.from_state.replaceAll('_', ' ')} → {event.to_state.replaceAll('_', ' ')}</small>}{event.reason && <small>{event.reason}</small>}</div><time>{event.occurred_at ? new Date(event.occurred_at).toLocaleString() : ''}<small>{event.actor ?? 'System'}</small></time></article>)}</div></section>}
     {isRegister && masterEntries && <section className="panel registry-panel"><div className="panel-heading"><div><h2>Master Code Register</h2><p>Official code assignments maintained separately from document metadata.</p></div></div>
       <div className="registry-table-wrap"><table className="registry-table"><thead><tr><th>Base code</th><th>Components</th><th>Document</th><th>Requested</th><th>Assigned by / date</th></tr></thead><tbody>{masterEntries.map((entry) => <tr key={entry.id}><td><strong>{entry.base_code}</strong><small>Rev {entry.document.current_revision_label}</small></td><td>{[entry.service_component, entry.section_component, entry.unit_component, entry.document_type_component].filter(Boolean).map((item) => item!.code).join(' / ')}</td><td>{entry.document.title}<small>{entry.document.owning_unit.name}</small></td><td>{new Date(entry.requested_at).toLocaleDateString()}</td><td>{entry.assigned_by.name}<small>{new Date(entry.assigned_at).toLocaleDateString()}</small></td></tr>)}</tbody></table></div>
@@ -400,6 +426,38 @@ function fieldError(errors: Record<string, string>, name: string) {
 function readableStatus(value: string) {
   const text = value.replaceAll('_', ' ')
   return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
+/** Turns validation details into plain text: no raw JSON ever reaches the page. */
+function formatFindingDetail(rule: string, detail: unknown): string {
+  if (detail === null || detail === undefined || detail === '') return ''
+  if (rule === 'size' && typeof detail === 'number') return `${detail.toLocaleString()} bytes`
+  if (typeof detail === 'object' && !Array.isArray(detail)) {
+    const text = Object.entries(detail as Record<string, unknown>)
+      .map(([key, value]) => `${key.replaceAll('_', ' ')} ${detailValue(value)}`)
+      .join(', ')
+    return text.charAt(0).toUpperCase() + text.slice(1)
+  }
+
+  return detailValue(detail)
+}
+
+function detailValue(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'string') return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value) ? value.toUpperCase() : value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (Array.isArray(value)) return value.map(detailValue).filter(Boolean).join('; ')
+  if (typeof value === 'object') return Object.entries(value as Record<string, unknown>).map(([key, item]) => `${key.replaceAll('_', ' ')} ${detailValue(item)}`).join(', ')
+
+  return String(value)
+}
+
+function findingTone(value: string) {
+  if (value === 'pass') return 'released'
+  if (['block', 'fail', 'failed'].includes(value)) return 'returned'
+  if (['warning', 'manual', 'pending'].includes(value)) return 'pending'
+
+  return 'neutral'
 }
 
 function statusTone(value: string) {

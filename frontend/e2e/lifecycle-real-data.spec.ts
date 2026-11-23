@@ -159,7 +159,10 @@ test('a draft is submitted, verified, reviewed, approved, dated, and released', 
   await signInAs(page, KMT)
   await openRegistry(page)
   detail = await openDetails(page, 'Sample — Draft procedure')
-  const verifyForm = workflowTask(detail, 'verified')
+  await expect(detail.getByRole('heading', { name: 'Your decision' })).toBeVisible()
+  await expect(detail.getByRole('button', { name: 'Approve', exact: true })).toBeVisible()
+  await expect(detail.getByRole('button', { name: 'Return for revision', exact: true })).toBeVisible()
+  const verifyForm = workflowTask(detail, 'Approve')
   await expect(verifyForm).toBeVisible()
   await verifyForm.getByRole('button', { name: 'Return for revision' }).click()
   await expect(verifyForm.locator('.field-error')).toBeVisible()
@@ -168,7 +171,7 @@ test('a draft is submitted, verified, reviewed, approved, dated, and released', 
   await expect(detail.getByText('Submitted', { exact: true }).first()).toBeVisible()
   // The sample file carries findings KMT must resolve with a recorded reason.
   await verifyForm.locator('textarea[name="comment"]').fill('Fictional browser test: warnings reviewed against the sample file.')
-  await verifyForm.getByRole('button', { name: 'verified', exact: true }).click()
+  await verifyForm.getByRole('button', { name: 'Approve', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('Recorded verified')
   await expect(detail.getByText('In review', { exact: true }).first()).toBeVisible()
 
@@ -176,14 +179,20 @@ test('a draft is submitted, verified, reviewed, approved, dated, and released', 
   await signInAs(page, DIVISION_HEAD)
   await openRegistry(page)
   detail = await openDetails(page, 'Sample — Draft procedure')
-  await detail.getByRole('button', { name: 'reviewed', exact: true }).click()
+  await expect(detail.getByRole('heading', { name: 'Your decision' })).toBeVisible()
+  await expect(detail.getByRole('button', { name: 'Approve', exact: true })).toBeVisible()
+  await expect(detail.getByRole('button', { name: 'Return for revision', exact: true })).toBeVisible()
+  await detail.getByRole('button', { name: 'Approve', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('Recorded reviewed')
 
   // MCC final approval.
   await signInAs(page, MCC)
   await openRegistry(page)
   detail = await openDetails(page, 'Sample — Draft procedure')
-  await detail.getByRole('button', { name: 'approved', exact: true }).click()
+  await expect(detail.getByRole('heading', { name: 'Your decision' })).toBeVisible()
+  await expect(detail.getByRole('button', { name: 'Approve', exact: true })).toBeVisible()
+  await expect(detail.getByRole('button', { name: 'Return for revision', exact: true })).toBeVisible()
+  await detail.getByRole('button', { name: 'Approve', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('Recorded approved')
   await expect(detail.getByText('Approved', { exact: true }).first()).toBeVisible()
 

@@ -150,9 +150,9 @@ test('a workflow decision refuses an empty reason and succeeds with one', async 
   await expect(page.getByRole('status')).toContainText('Recorded submit for revision')
   await expect(detail.getByText('Submitted', { exact: true }).first()).toBeVisible()
 
-  const task = detail.locator('form').filter({ has: page.getByRole('button', { name: 'verified' }) }).first()
+  const task = detail.locator('form').filter({ has: page.getByRole('button', { name: 'Approve' }) }).first()
   await expect(task).toBeVisible()
-  await task.getByRole('button', { name: 'verified' }).click()
+  await task.getByRole('button', { name: 'Approve' }).click()
 
   // The server requires a recorded reason for the manual and not-checked findings.
   const alert = page.getByRole('alert')
@@ -160,7 +160,7 @@ test('a workflow decision refuses an empty reason and succeeds with one', async 
   await expect(detail.getByText('In review', { exact: true }).first()).toBeHidden()
 
   await task.locator('textarea[name="comment"]').fill('Fictional browser test: warnings reviewed against the sample file.')
-  await task.getByRole('button', { name: 'verified' }).click()
+  await task.getByRole('button', { name: 'Approve' }).click()
   await expect(page.getByRole('status')).toContainText('Recorded verified')
   await expect(page.getByRole('alert')).toHaveCount(0)
   await expect(detail.getByText('In review', { exact: true }).first()).toBeVisible()
@@ -219,6 +219,35 @@ test('uploading a revision and saving the title-size setting keep the register c
   await expect(reloaded).toContainText('Revision 1.1')
   await expect(documentRow(page, 'Sample — Released procedure')).toContainText('Rev 1.1')
   expect(problems).toEqual([])
+})
+
+test('submission check results fill the card and read as rows, not JSON', async ({ page }) => {
+  test.setTimeout(120_000)
+  await openRegistry(page)
+
+  const card = page.locator('section.panel').filter({ has: page.getByRole('heading', { level: 2, name: 'Submission check results' }) })
+  await expect(card).toBeVisible()
+  await expect(card.locator('article').first()).toBeVisible()
+  // Findings are rendered as sentences: raw JSON must never reach the page.
+  await expect(card).not.toContainText('{"')
+  await expect(card).toContainText('Expected PDF, detected PDF')
+
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    await card.scrollIntoViewIfNeeded()
+
+    const geometry = await card.evaluate((section) => ({
+      container: section.getBoundingClientRect().width,
+      contents: Array.from(section.querySelectorAll('article')).map((record) => record.firstElementChild?.getBoundingClientRect().width ?? 0),
+    }))
+
+    expect(geometry.contents.length, 'no check results rendered').toBeGreaterThan(0)
+    for (const content of geometry.contents) {
+      expect(content, `check content is narrower than half the card at ${width}px`).toBeGreaterThanOrEqual(geometry.container / 2)
+    }
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+    expect(overflow, `page overflows horizontally at ${width}px`).toBeLessThanOrEqual(1)
+  }
 })
 
 test('at 1024px code, title, status, and actions stay inside the register scroller', async ({ page }) => {

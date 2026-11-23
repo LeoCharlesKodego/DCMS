@@ -168,6 +168,7 @@ class DocumentRegistryController extends Controller
                 'available_actions' => app(DocumentLifecycleService::class)->availableActions($version, $viewer),
                 'lifecycle_note' => app(DocumentLifecycleService::class)->statusNote($version),
                 'workflow_tasks' => $workflowDecisions->visibleTasksFor($viewer, $version),
+                'decision_reason' => $workflowDecisions->decisionReasonFor($viewer, $version),
                 'distributions' => $distributions->visibleFor($version, $viewer),
                 'files' => $version->files->map(fn ($file) => [
                     'id' => $file->id,

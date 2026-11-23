@@ -102,7 +102,7 @@ test('a returned submission offers the same verifier a new task after resubmissi
   const firstDetail = page.locator(`#${firstDetailId}`)
   await expect(firstDetail.getByText('Submitted', { exact: true })).toBeVisible()
   await firstDetail.locator('textarea[name="comment"]').fill('Fictional browser test: sample findings reviewed for the resubmission check.')
-  await firstDetail.getByRole('button', { name: 'verified', exact: true }).click()
+  await firstDetail.getByRole('button', { name: 'Approve', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('Recorded verified')
 
   // Division Head returns the submission.
@@ -143,7 +143,7 @@ test('a returned submission offers the same verifier a new task after resubmissi
   if ((await newToggle.getAttribute('aria-expanded')) !== 'true') {
     await newToggle.click()
   }
-  await expect(page.locator(`#${newDetailId}`).getByRole('button', { name: 'verified', exact: true })).toBeVisible()
+  await expect(page.locator(`#${newDetailId}`).getByRole('button', { name: 'Approve', exact: true })).toBeVisible()
 
   expect(problems).toEqual([])
 })
